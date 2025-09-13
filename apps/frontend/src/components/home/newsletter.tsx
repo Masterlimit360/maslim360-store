@@ -27,7 +27,7 @@ export function Newsletter() {
   }
 
   return (
-    <section className="py-16 bg-primary text-primary-foreground">
+    <section className="py-16 bg-gradient-to-r from-yellow-500 to-orange-500 text-black">
       <div className="container mx-auto px-4">
         <div className="max-w-2xl mx-auto text-center">
           <div className="flex justify-center mb-6">
@@ -39,7 +39,7 @@ export function Newsletter() {
           <h2 className="text-3xl font-bold mb-4">
             Stay Updated with Our Newsletter
           </h2>
-          <p className="text-lg mb-8 text-primary-foreground/80">
+          <p className="text-lg mb-8 text-gray-800">
             Get the latest updates on new products, exclusive deals, and special offers delivered straight to your inbox.
           </p>
 
@@ -53,7 +53,7 @@ export function Newsletter() {
             />
             <Button 
               type="submit" 
-              className="bg-white text-primary hover:bg-gray-100"
+              className="bg-white text-yellow-600 hover:bg-gray-100"
               disabled={isSubscribed}
             >
               {isSubscribed ? (
@@ -67,7 +67,7 @@ export function Newsletter() {
             </Button>
           </form>
 
-          <p className="text-sm mt-4 text-primary-foreground/60">
+          <p className="text-sm mt-4 text-gray-700">
             We respect your privacy. Unsubscribe at any time.
           </p>
         </div>
