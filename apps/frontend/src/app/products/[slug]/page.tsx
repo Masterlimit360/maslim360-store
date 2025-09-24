@@ -92,7 +92,7 @@ export default function ProductDetailPage() {
   const { addItem } = useCart()
 
   const handleAddToCart = () => {
-    addItem(mockProduct, undefined, quantity)
+    addItem(mockProduct.id, undefined, quantity)
   }
 
   const handleQuantityChange = (change: number) => {

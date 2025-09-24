@@ -33,10 +33,9 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         email,
+        password: hashedPassword,
         firstName,
         lastName,
-        // Note: In a real app, you'd store the hashed password
-        // For now, we'll skip password storage in this example
       },
     });
 
@@ -63,15 +62,15 @@ export class AuthService {
       where: { email },
     });
 
-    if (!user) {
+    if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // In a real app, you'd verify the password here
-    // const isPasswordValid = await bcrypt.compare(password, user.password);
-    // if (!isPasswordValid) {
-    //   throw new UnauthorizedException('Invalid credentials');
-    // }
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     // Generate JWT token
     const payload = { sub: user.id, email: user.email };

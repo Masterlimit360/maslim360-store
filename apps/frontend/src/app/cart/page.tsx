@@ -63,13 +63,13 @@ const mockCoupons = [
 export default function CartPage() {
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
-  const { items, updateQuantity, removeItem, subtotal, itemCount } = useCart()
+  const { items, updateItem, removeItem, subtotal, itemCount } = useCart()
 
   const handleQuantityChange = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       removeItem(itemId)
     } else {
-      updateQuantity(itemId, newQuantity)
+      updateItem(itemId, newQuantity)
     }
   }
 
@@ -138,7 +138,7 @@ export default function CartPage() {
                   <div className="flex gap-4">
                     <div className="relative w-24 h-24 flex-shrink-0">
                       <Image
-                        src={item.product.image}
+                        src={item.product.images.find(img => img.isPrimary)?.url || item.product.images[0]?.url || '/placeholder.jpg'}
                         alt={item.product.title}
                         fill
                         className="object-cover rounded-lg"

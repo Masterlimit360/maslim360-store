@@ -12,11 +12,30 @@ export const metadata: Metadata = {
   description: 'Discover amazing products at MasLim360 Store. Quality, variety, and great prices all in one place.',
   keywords: 'ecommerce, shopping, online store, products, deals',
   authors: [{ name: 'MasLim360 Team' }],
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/assets/logos/MasLim360-logo.png',
+  },
   openGraph: {
     title: 'MasLim360 Store',
     description: 'Your Ultimate Shopping Destination',
     type: 'website',
     locale: 'en_US',
+    images: [
+      {
+        url: '/assets/logos/MasLim360-logo.png',
+        width: 1200,
+        height: 630,
+        alt: 'MasLim360 Store',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'MasLim360 Store',
+    description: 'Your Ultimate Shopping Destination',
+    images: ['/assets/logos/MasLim360-logo.png'],
   },
 }
 

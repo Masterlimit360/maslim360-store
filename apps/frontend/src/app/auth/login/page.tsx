@@ -42,7 +42,13 @@ export default function LoginPage() {
         {/* Left Side - Branding */}
         <div className="hidden lg:flex flex-col justify-center items-center text-center space-y-8">
           <div className="space-y-4">
-            <div className="h-16 w-16 rounded-full bg-yellow-500 mx-auto"></div>
+            <Image
+              src="/assets/logos/MasLim360-logo.png"
+              alt="MasLim360 Logo"
+              width={64}
+              height={64}
+              className="h-16 w-16 mx-auto"
+            />
             <h1 className="text-4xl font-bold text-gray-900">MasLim360</h1>
             <p className="text-xl text-gray-600">
               Your Ultimate Shopping Destination
@@ -168,7 +174,7 @@ export default function LoginPage() {
                     className="w-full"
                   >
                     <Image
-                      src="https://developers.google.com/identity/images/g-logo.png"
+                      src="/assets/icons/google-logo.svg"
                       alt="Google"
                       width={20}
                       height={20}

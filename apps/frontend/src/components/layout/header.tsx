@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react'
 import { Search, ShoppingCart, User, Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,13 @@ export function Header() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded bg-primary"></div>
+            <Image
+              src="/assets/logos/MasLim360-logo.png"
+              alt="MasLim360 Logo"
+              width={32}
+              height={32}
+              className="h-8 w-8"
+            />
             <span className="text-xl font-bold">MasLim360</span>
           </Link>
 

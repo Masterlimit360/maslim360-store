@@ -60,7 +60,7 @@ export function FeaturedProducts() {
   const { addItem } = useCart()
 
   const handleAddToCart = (product: any) => {
-    addItem(product)
+    addItem(product.id)
   }
 
   return (
