@@ -1,24 +1,26 @@
+# Root Dockerfile for backend deployment
+# This assumes the build context is the repository root
 FROM node:18-alpine AS base
 
 # Install pnpm
 RUN npm install -g pnpm@8
 
-# Set working directory to root
+# Set working directory
 WORKDIR /app
 
-# Copy workspace configuration files
+# Copy workspace configuration
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Copy backend package.json
 COPY apps/backend/package.json ./apps/backend/
 
-# Install all dependencies (needed for workspace)
+# Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy backend source code
+# Copy backend source
 COPY apps/backend ./apps/backend
 
-# Generate Prisma client and build
+# Build backend
 WORKDIR /app/apps/backend
 RUN pnpm prisma generate
 RUN pnpm build
@@ -33,22 +35,19 @@ WORKDIR /app
 
 # Copy workspace files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
-# Copy backend package.json
 COPY apps/backend/package.json ./apps/backend/
 
-# Install only production dependencies
+# Install production dependencies
 RUN pnpm install --frozen-lockfile --prod
 
-# Copy built files from builder
+# Copy built application
 COPY --from=base /app/apps/backend/dist ./apps/backend/dist
 COPY --from=base /app/apps/backend/prisma ./apps/backend/prisma
 COPY --from=base /app/node_modules ./node_modules
 
 WORKDIR /app/apps/backend
 
-# Expose port
 EXPOSE 4000
 
-# Start the application
 CMD ["node", "dist/main.js"]
+
