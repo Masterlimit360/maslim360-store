@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,91 +9,84 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, Filter, Grid, List, Star, ShoppingCart, Heart } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { useCart } from '@/hooks/use-cart'
-
-const mockProducts = [
-  {
-    id: '1',
-    title: 'Wireless Bluetooth Headphones',
-    slug: 'wireless-bluetooth-headphones',
-    price: 99.99,
-    comparePrice: 149.99,
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
-    rating: 4.5,
-    reviewCount: 128,
-    isNew: true,
-    category: 'Electronics',
-  },
-  {
-    id: '2',
-    title: 'Smart Fitness Watch',
-    slug: 'smart-fitness-watch',
-    price: 199.99,
-    comparePrice: 249.99,
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-    rating: 4.8,
-    reviewCount: 89,
-    isNew: false,
-    category: 'Electronics',
-  },
-  {
-    id: '3',
-    title: 'Premium Coffee Maker',
-    slug: 'premium-coffee-maker',
-    price: 79.99,
-    comparePrice: 99.99,
-    image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400',
-    rating: 4.3,
-    reviewCount: 156,
-    isNew: true,
-    category: 'Home & Kitchen',
-  },
-  {
-    id: '4',
-    title: 'Ergonomic Office Chair',
-    slug: 'ergonomic-office-chair',
-    price: 299.99,
-    comparePrice: 399.99,
-    image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400',
-    rating: 4.7,
-    reviewCount: 67,
-    isNew: false,
-    category: 'Furniture',
-  },
-  {
-    id: '5',
-    title: 'Professional Camera Lens',
-    slug: 'professional-camera-lens',
-    price: 599.99,
-    comparePrice: 799.99,
-    image: 'https://images.unsplash.com/photo-1606983340126-99ab4feaa64a?w=400',
-    rating: 4.9,
-    reviewCount: 234,
-    isNew: false,
-    category: 'Electronics',
-  },
-  {
-    id: '6',
-    title: 'Designer Handbag',
-    slug: 'designer-handbag',
-    price: 199.99,
-    comparePrice: 299.99,
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400',
-    rating: 4.6,
-    reviewCount: 89,
-    isNew: true,
-    category: 'Fashion',
-  },
-]
+import { apiClient } from '@/lib/api'
+import Link from 'next/link'
+import Image from 'next/image'
 
 export default function ProductsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [sortBy, setSortBy] = useState('newest')
+  const [sortBy, setSortBy] = useState('createdAt')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [priceRange, setPriceRange] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [products, setProducts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const { addItem } = useCart()
 
-  const handleAddToCart = (product: any) => {
-    addItem(product.id)
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true)
+        const params: any = {
+          page,
+          limit: 20,
+          sortBy,
+          sortOrder,
+        }
+
+        if (searchQuery) {
+          params.search = searchQuery
+        }
+
+        if (priceRange !== 'all') {
+          const [min, max] = priceRange.split('-').map(v => v === '+' ? undefined : parseFloat(v))
+          if (min !== undefined) params.minPrice = min
+          if (max !== undefined) params.maxPrice = max
+        }
+
+        const response = await apiClient.getProducts(params)
+        if (response.success) {
+          setProducts(response.data.products || [])
+          setTotal(response.data.total || 0)
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProducts()
+  }, [page, sortBy, sortOrder, priceRange, searchQuery])
+
+  const handleAddToCart = async (product: any) => {
+    await addItem(product.id)
+  }
+
+  const handleSortChange = (value: string) => {
+    switch (value) {
+      case 'newest':
+        setSortBy('createdAt')
+        setSortOrder('desc')
+        break
+      case 'price-low':
+        setSortBy('price')
+        setSortOrder('asc')
+        break
+      case 'price-high':
+        setSortBy('price')
+        setSortOrder('desc')
+        break
+      case 'rating':
+        setSortBy('averageRating')
+        setSortOrder('desc')
+        break
+      default:
+        setSortBy('createdAt')
+        setSortOrder('desc')
+    }
   }
 
   return (
@@ -125,7 +118,7 @@ export default function ProductsPage() {
 
             {/* Filters */}
             <div className="flex gap-4">
-              <Select value={sortBy} onValueChange={setSortBy}>
+              <Select value={sortBy === 'createdAt' && sortOrder === 'desc' ? 'newest' : sortBy === 'price' && sortOrder === 'asc' ? 'price-low' : sortBy === 'price' && sortOrder === 'desc' ? 'price-high' : 'rating'} onValueChange={handleSortChange}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
@@ -159,7 +152,7 @@ export default function ProductsPage() {
           {/* View Toggle */}
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Showing {mockProducts.length} products
+              Showing {products.length} of {total} products
             </p>
             <div className="flex gap-2">
               <Button
@@ -181,6 +174,114 @@ export default function ProductsPage() {
         </div>
 
         {/* Products Grid */}
+        {loading ? (
+          <div className="text-center py-12">Loading products...</div>
+        ) : products.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">No products found</div>
+        ) : (
+          <div className={
+            viewMode === 'grid' 
+              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
+              : 'space-y-4'
+          }>
+            {products.map((product) => (
+              <Card key={product.id} className="group hover:shadow-lg transition-shadow">
+                <CardContent className="p-0">
+                  <div className="relative overflow-hidden">
+                    <Link href={`/products/${product.slug}`}>
+                      <Image
+                        src={product.images?.[0]?.url || '/placeholder-product.jpg'}
+                        alt={product.images?.[0]?.alt || product.title}
+                        width={400}
+                        height={300}
+                        className={`w-full object-cover group-hover:scale-105 transition-transform duration-300 ${
+                          viewMode === 'grid' ? 'h-48' : 'h-32 w-32'
+                        }`}
+                      />
+                    </Link>
+                    {product.isFeatured && (
+                      <Badge className="absolute top-2 left-2 bg-green-500">
+                        Featured
+                      </Badge>
+                    )}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button size="icon" variant="secondary" className="h-8 w-8">
+                        <Heart className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <Link href={`/products/${product.slug}`}>
+                          <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors line-clamp-2">
+                            {product.title}
+                          </h3>
+                        </Link>
+                        <p className="text-sm text-muted-foreground">{product.category?.name}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center mb-3">
+                      <div className="flex items-center">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`h-4 w-4 ${
+                              i < Math.floor(product.averageRating || 0)
+                                ? 'text-yellow-400 fill-current'
+                                : 'text-gray-300'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-sm text-muted-foreground ml-2">
+                        ({product.reviewCount || 0})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg font-bold">
+                          {formatPrice(product.price)}
+                        </span>
+                        {product.comparePrice && (
+                          <span className="text-sm text-muted-foreground line-through">
+                            {formatPrice(product.comparePrice)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <Button 
+                      className="w-full" 
+                      onClick={() => handleAddToCart(product)}
+                    >
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      Add to Cart
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        <div className="mt-12 flex justify-center">
+          <div className="flex gap-2">
+            <Button variant="outline" disabled>Previous</Button>
+            <Button variant="default">1</Button>
+            <Button variant="outline">2</Button>
+            <Button variant="outline">3</Button>
+            <Button variant="outline">Next</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
         <div className={
           viewMode === 'grid' 
             ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'

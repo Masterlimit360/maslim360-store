@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,59 +9,33 @@ import { Badge } from '@/components/ui/badge'
 import { Star, ShoppingCart, Heart } from 'lucide-react'
 import { useCart } from '@/hooks/use-cart'
 import { formatPrice } from '@/lib/utils'
-
-const featuredProducts = [
-  {
-    id: '1',
-    title: 'Wireless Bluetooth Headphones',
-    slug: 'wireless-bluetooth-headphones',
-    price: 99.99,
-    comparePrice: 149.99,
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
-    rating: 4.5,
-    reviewCount: 128,
-    isNew: true,
-  },
-  {
-    id: '2',
-    title: 'Smart Fitness Watch',
-    slug: 'smart-fitness-watch',
-    price: 199.99,
-    comparePrice: 249.99,
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-    rating: 4.8,
-    reviewCount: 89,
-    isNew: false,
-  },
-  {
-    id: '3',
-    title: 'Premium Coffee Maker',
-    slug: 'premium-coffee-maker',
-    price: 79.99,
-    comparePrice: 99.99,
-    image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400',
-    rating: 4.3,
-    reviewCount: 156,
-    isNew: true,
-  },
-  {
-    id: '4',
-    title: 'Ergonomic Office Chair',
-    slug: 'ergonomic-office-chair',
-    price: 299.99,
-    comparePrice: 399.99,
-    image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400',
-    rating: 4.7,
-    reviewCount: 67,
-    isNew: false,
-  },
-]
+import { apiClient } from '@/lib/api'
 
 export function FeaturedProducts() {
   const { addItem } = useCart()
+  const [products, setProducts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const handleAddToCart = (product: any) => {
-    addItem(product.id)
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true)
+        const response = await apiClient.getFeaturedProducts()
+        if (response.success) {
+          setProducts(response.data || [])
+        }
+      } catch (error) {
+        console.error('Error fetching featured products:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProducts()
+  }, [])
+
+  const handleAddToCart = async (product: any) => {
+    await addItem(product.id)
   }
 
   return (
@@ -74,22 +49,27 @@ export function FeaturedProducts() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {featuredProducts.map((product) => (
+          {loading ? (
+            <div className="col-span-4 text-center py-8">Loading featured products...</div>
+          ) : products.length === 0 ? (
+            <div className="col-span-4 text-center py-8 text-muted-foreground">No featured products available</div>
+          ) : (
+            products.map((product) => (
             <Card key={product.id} className="group hover:shadow-lg transition-shadow">
               <CardContent className="p-0">
                 <div className="relative overflow-hidden">
                   <Link href={`/products/${product.slug}`}>
                     <Image
-                      src={product.image}
-                      alt={product.title}
+                      src={product.images?.[0]?.url || '/placeholder-product.jpg'}
+                      alt={product.images?.[0]?.alt || product.title}
                       width={400}
                       height={300}
                       className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   </Link>
-                  {product.isNew && (
+                  {product.isFeatured && (
                     <Badge className="absolute top-2 left-2 bg-green-500">
-                      New
+                      Featured
                     </Badge>
                   )}
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -111,7 +91,7 @@ export function FeaturedProducts() {
                         <Star
                           key={i}
                           className={`h-4 w-4 ${
-                            i < Math.floor(product.rating)
+                            i < Math.floor(product.averageRating || 0)
                               ? 'text-yellow-400 fill-current'
                               : 'text-gray-300'
                           }`}
@@ -119,7 +99,7 @@ export function FeaturedProducts() {
                       ))}
                     </div>
                     <span className="text-sm text-muted-foreground ml-2">
-                      ({product.reviewCount})
+                      ({product.reviewCount || 0})
                     </span>
                   </div>
 
@@ -146,7 +126,8 @@ export function FeaturedProducts() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            ))
+          )}
         </div>
 
         <div className="text-center mt-8">

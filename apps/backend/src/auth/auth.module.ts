@@ -14,16 +14,30 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
     PassportModule,
     JwtModule.registerAsync({
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET'),
-        signOptions: {
-          expiresIn: configService.get('JWT_EXPIRES_IN', '7d'),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const jwtSecret = configService.get('JWT_SECRET') || 'default-development-secret-change-in-production';
+        
+        // Warn if using default secret in production
+        if (process.env.NODE_ENV === 'production' && jwtSecret === 'default-development-secret-change-in-production') {
+          console.warn('WARNING: Using default JWT_SECRET in production! Please set a secure JWT_SECRET in your environment variables.');
+        }
+
+        return {
+          secret: jwtSecret,
+          signOptions: {
+            expiresIn: configService.get('JWT_EXPIRES_IN', '7d'),
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy, GoogleStrategy, FacebookStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    FacebookStrategy,
+  ],
   controllers: [AuthController],
   exports: [AuthService],
 })

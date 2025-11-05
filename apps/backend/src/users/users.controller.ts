@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Param, Query, UseGuards, Delete } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, Query, UseGuards, Delete, Post, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -15,57 +15,78 @@ export class UsersController {
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, description: 'User profile retrieved' })
-  async getProfile(@Param('userId') userId: string) {
-    return this.usersService.findById(userId);
+  async getProfile(@Req() req) {
+    return this.usersService.findById(req.user.id);
   }
 
   @Put('me')
   @ApiOperation({ summary: 'Update current user profile' })
   @ApiResponse({ status: 200, description: 'User profile updated' })
-  async updateProfile(@Param('userId') userId: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(userId, updateUserDto);
+  async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.update(req.user.id, updateUserDto);
   }
 
   @Get('me/orders')
   @ApiOperation({ summary: 'Get user orders' })
   @ApiResponse({ status: 200, description: 'User orders retrieved' })
   async getUserOrders(
-    @Param('userId') userId: string,
+    @Req() req,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
   ) {
-    return this.usersService.getUserOrders(userId, +page, +limit);
+    return this.usersService.getUserOrders(req.user.id, +page, +limit);
   }
 
   @Get('me/addresses')
   @ApiOperation({ summary: 'Get user addresses' })
   @ApiResponse({ status: 200, description: 'User addresses retrieved' })
-  async getUserAddresses(@Param('userId') userId: string) {
-    return this.usersService.getUserAddresses(userId);
+  async getUserAddresses(@Req() req) {
+    return this.usersService.getUserAddresses(req.user.id);
   }
 
-  @Put('me/addresses')
+  @Post('me/addresses')
   @ApiOperation({ summary: 'Create user address' })
   @ApiResponse({ status: 201, description: 'Address created' })
-  async createAddress(@Param('userId') userId: string, @Body() createAddressDto: CreateAddressDto) {
-    return this.usersService.createAddress(userId, createAddressDto);
+  async createAddress(@Req() req, @Body() createAddressDto: CreateAddressDto) {
+    return this.usersService.createAddress(req.user.id, createAddressDto);
   }
 
   @Put('me/addresses/:addressId')
   @ApiOperation({ summary: 'Update user address' })
   @ApiResponse({ status: 200, description: 'Address updated' })
   async updateAddress(
-    @Param('userId') userId: string,
+    @Req() req,
     @Param('addressId') addressId: string,
     @Body() updateAddressDto: CreateAddressDto,
   ) {
-    return this.usersService.updateAddress(addressId, userId, updateAddressDto);
+    return this.usersService.updateAddress(addressId, req.user.id, updateAddressDto);
   }
 
   @Delete('me/addresses/:addressId')
   @ApiOperation({ summary: 'Delete user address' })
   @ApiResponse({ status: 200, description: 'Address deleted' })
-  async deleteAddress(@Param('userId') userId: string, @Param('addressId') addressId: string) {
-    return this.usersService.deleteAddress(addressId, userId);
+  async deleteAddress(@Req() req, @Param('addressId') addressId: string) {
+    return this.usersService.deleteAddress(addressId, req.user.id);
+  }
+
+  @Get('me/wishlist')
+  @ApiOperation({ summary: 'Get user wishlist' })
+  @ApiResponse({ status: 200, description: 'Wishlist retrieved' })
+  async getWishlist(@Req() req) {
+    return this.usersService.getWishlist(req.user.id);
+  }
+
+  @Post('me/wishlist/:productId')
+  @ApiOperation({ summary: 'Add product to wishlist' })
+  @ApiResponse({ status: 201, description: 'Product added to wishlist' })
+  async addToWishlist(@Req() req, @Param('productId') productId: string) {
+    return this.usersService.addToWishlist(req.user.id, productId);
+  }
+
+  @Delete('me/wishlist/:productId')
+  @ApiOperation({ summary: 'Remove product from wishlist' })
+  @ApiResponse({ status: 200, description: 'Product removed from wishlist' })
+  async removeFromWishlist(@Req() req, @Param('productId') productId: string) {
+    return this.usersService.removeFromWishlist(req.user.id, productId);
   }
 }

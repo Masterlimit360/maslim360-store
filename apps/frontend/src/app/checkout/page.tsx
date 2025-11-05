@@ -1,6 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,62 +19,49 @@ import {
   ArrowLeft,
   Check,
   MapPin,
-  User
+  User,
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
-import Link from 'next/link'
 import { formatPrice } from '@/lib/utils'
 import { useCart } from '@/hooks/use-cart'
-
-const mockCartItems = [
-  {
-    id: '1',
-    product: {
-      title: 'Wireless Bluetooth Headphones',
-      price: 99.99,
-      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100',
-    },
-    quantity: 2,
-  },
-  {
-    id: '2',
-    product: {
-      title: 'Smart Fitness Watch',
-      price: 199.99,
-      image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100',
-    },
-    quantity: 1,
-  },
-]
+import { apiClient } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function CheckoutPage() {
+  const router = useRouter()
+  const { items, subtotal, clearCart } = useCart()
+  const { isAuthenticated } = useAuth()
   const [currentStep, setCurrentStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([])
+  const [selectedShippingAddress, setSelectedShippingAddress] = useState<string | null>(null)
+  const [selectedBillingAddress, setSelectedBillingAddress] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     // Shipping Information
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
-    address: '',
+    street: '',
     city: '',
     state: '',
-    zipCode: '',
+    postalCode: '',
     country: 'Ghana',
     
     // Billing Information
     sameAsShipping: true,
     billingFirstName: '',
     billingLastName: '',
-    billingAddress: '',
+    billingStreet: '',
     billingCity: '',
     billingState: '',
-    billingZipCode: '',
+    billingPostalCode: '',
+    billingCountry: 'Ghana',
     
     // Payment Information
     paymentMethod: 'card',
-    cardNumber: '',
-    expiryDate: '',
-    cvv: '',
-    cardName: '',
     
     // Order Notes
     notes: '',
@@ -80,10 +70,46 @@ export default function CheckoutPage() {
     agreeToTerms: false,
   })
 
-  const { items, subtotal, itemCount } = useCart()
-  const shipping = subtotal > 50 ? 0 : 9.99
-  const tax = subtotal * 0.08
-  const total = subtotal + shipping + tax
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/auth/login')
+      return
+    }
+
+    if (items.length === 0) {
+      router.push('/cart')
+      return
+    }
+
+    const fetchAddresses = async () => {
+      try {
+        const response = await apiClient.getAddresses()
+        if (response.success) {
+          setSavedAddresses(response.data || [])
+          const defaultAddress = response.data?.find((a: any) => a.isDefault)
+          if (defaultAddress) {
+            setSelectedShippingAddress(defaultAddress.id)
+            setSelectedBillingAddress(defaultAddress.id)
+            setFormData({
+              ...formData,
+              firstName: defaultAddress.firstName,
+              lastName: defaultAddress.lastName,
+              street: defaultAddress.street,
+              city: defaultAddress.city,
+              state: defaultAddress.state,
+              postalCode: defaultAddress.postalCode,
+              country: defaultAddress.country,
+              phone: defaultAddress.phone || '',
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching addresses:', error)
+      }
+    }
+
+    fetchAddresses()
+  }, [isAuthenticated, router])
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -101,17 +127,115 @@ export default function CheckoutPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle order submission
-    console.log('Order submitted:', formData)
+    setError(null)
+    setLoading(true)
+
+    try {
+      // Step 1: Create addresses if not using saved ones
+      let shippingAddressId = selectedShippingAddress
+      let billingAddressId = selectedBillingAddress
+
+      if (!shippingAddressId) {
+        const shippingAddress = await apiClient.createAddress({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          street: formData.street,
+          city: formData.city,
+          state: formData.state,
+          postalCode: formData.postalCode,
+          country: formData.country,
+          phone: formData.phone,
+          isDefault: false,
+        })
+        if (shippingAddress.success) {
+          shippingAddressId = shippingAddress.data.id
+        }
+      }
+
+      if (!billingAddressId) {
+        if (formData.sameAsShipping) {
+          billingAddressId = shippingAddressId
+        } else {
+          const billingAddress = await apiClient.createAddress({
+            firstName: formData.billingFirstName,
+            lastName: formData.billingLastName,
+            street: formData.billingStreet,
+            city: formData.billingCity,
+            state: formData.billingState,
+            postalCode: formData.billingPostalCode,
+            country: formData.billingCountry,
+            phone: formData.phone,
+            isDefault: false,
+          })
+          if (billingAddress.success) {
+            billingAddressId = billingAddress.data.id
+          }
+        }
+      }
+
+      // Step 2: Calculate shipping and tax
+      const shippingAmount = subtotal > 50 ? 0 : 9.99
+      const taxAmount = subtotal * 0.08
+
+      // Step 3: Create order
+      const orderResponse = await apiClient.createOrder({
+        billingAddressId: billingAddressId!,
+        shippingAddressId: shippingAddressId!,
+        notes: formData.notes,
+        shippingAmount,
+        taxAmount,
+      })
+
+      if (!orderResponse.success) {
+        throw new Error(orderResponse.message || 'Failed to create order')
+      }
+
+      const order = orderResponse.data
+
+      // Step 4: Handle payment
+      if (formData.paymentMethod === 'card') {
+        // Create payment intent
+        const paymentIntent = await apiClient.createPaymentIntent(
+          order.id,
+          order.total,
+          'usd'
+        )
+
+        if (paymentIntent.success) {
+          // For demo purposes, we'll confirm payment immediately
+          // In production, you'd integrate with Stripe Elements
+          await apiClient.confirmPayment(
+            paymentIntent.data.id,
+            paymentIntent.data.transactionId || 'demo-txn'
+          )
+        }
+      }
+
+      // Step 5: Clear cart and redirect
+      clearCart()
+      router.push(`/orders/${order.id}?success=true`)
+    } catch (error: any) {
+      console.error('Error placing order:', error)
+      setError(error.message || 'Failed to place order. Please try again.')
+      setLoading(false)
+    }
   }
+
+  const shipping = subtotal > 50 ? 0 : 9.99
+  const tax = subtotal * 0.08
+  const total = subtotal + shipping + tax
 
   const steps = [
     { number: 1, title: 'Shipping', description: 'Delivery information' },
     { number: 2, title: 'Payment', description: 'Payment method' },
     { number: 3, title: 'Review', description: 'Order summary' },
   ]
+
+  if (!isAuthenticated || items.length === 0) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -203,11 +327,11 @@ export default function CheckoutPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="address">Street Address *</Label>
+                        <Label htmlFor="street">Street Address *</Label>
                         <Input
-                          id="address"
-                          value={formData.address}
-                          onChange={(e) => handleInputChange('address', e.target.value)}
+                          id="street"
+                          value={formData.street}
+                          onChange={(e) => handleInputChange('street', e.target.value)}
                           required
                         />
                       </div>
@@ -232,11 +356,11 @@ export default function CheckoutPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="zipCode">ZIP Code *</Label>
+                          <Label htmlFor="postalCode">Postal Code *</Label>
                           <Input
-                            id="zipCode"
-                            value={formData.zipCode}
-                            onChange={(e) => handleInputChange('zipCode', e.target.value)}
+                            id="postalCode"
+                            value={formData.postalCode}
+                            onChange={(e) => handleInputChange('postalCode', e.target.value)}
                             required
                           />
                         </div>
@@ -362,8 +486,8 @@ export default function CheckoutPage() {
                           <h3 className="font-semibold mb-2">Shipping Address</h3>
                           <div className="p-4 bg-muted rounded-lg">
                             <p>{formData.firstName} {formData.lastName}</p>
-                            <p>{formData.address}</p>
-                            <p>{formData.city}, {formData.state} {formData.zipCode}</p>
+                            <p>{formData.street}</p>
+                            <p>{formData.city}, {formData.state} {formData.postalCode}</p>
                             <p>{formData.country}</p>
                             <p>{formData.phone}</p>
                           </div>
@@ -373,11 +497,15 @@ export default function CheckoutPage() {
                           <h3 className="font-semibold mb-2">Payment Method</h3>
                           <div className="p-4 bg-muted rounded-lg">
                             <p className="capitalize">{formData.paymentMethod}</p>
-                            {formData.paymentMethod === 'card' && (
-                              <p>**** **** **** {formData.cardNumber.slice(-4)}</p>
-                            )}
                           </div>
                         </div>
+
+                        {error && (
+                          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5 text-red-600" />
+                            <p className="text-red-600">{error}</p>
+                          </div>
+                        )}
 
                         <div className="flex items-center space-x-2">
                           <Checkbox
@@ -416,9 +544,18 @@ export default function CheckoutPage() {
                         Next
                       </Button>
                     ) : (
-                      <Button type="submit" disabled={!formData.agreeToTerms}>
-                        <Lock className="h-4 w-4 mr-2" />
-                        Place Order
+                      <Button type="submit" disabled={!formData.agreeToTerms || loading}>
+                        {loading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-4 w-4 mr-2" />
+                            Place Order
+                          </>
+                        )}
                       </Button>
                     )}
                   </div>
@@ -435,19 +572,21 @@ export default function CheckoutPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
-                  {mockCartItems.map((item) => (
+                  {items.map((item) => (
                     <div key={item.id} className="flex items-center space-x-3">
-                      <img
-                        src={item.product.image}
-                        alt={item.product.title}
+                      <Image
+                        src={item.product?.images?.[0]?.url || '/placeholder-product.jpg'}
+                        alt={item.product?.title || 'Product'}
+                        width={48}
+                        height={48}
                         className="w-12 h-12 object-cover rounded"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{item.product.title}</p>
+                        <p className="text-sm font-medium truncate">{item.product?.title || 'Product'}</p>
                         <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                       </div>
                       <p className="text-sm font-medium">
-                        {formatPrice(item.product.price * item.quantity)}
+                        {formatPrice((item.product?.price || 0) * item.quantity)}
                       </p>
                     </div>
                   ))}
@@ -493,4 +632,5 @@ export default function CheckoutPage() {
     </div>
   )
 }
+
 

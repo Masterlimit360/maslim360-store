@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
+import Image from 'next/image'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,134 +18,89 @@ import {
   ShoppingCart, 
   Heart,
   X,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Loader2
 } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { useCart } from '@/hooks/use-cart'
-
-const mockSearchResults = [
-  {
-    id: '1',
-    title: 'Wireless Bluetooth Headphones',
-    slug: 'wireless-bluetooth-headphones',
-    price: 99.99,
-    comparePrice: 149.99,
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
-    rating: 4.5,
-    reviewCount: 128,
-    category: 'Electronics',
-    inStock: true,
-    isNew: true,
-  },
-  {
-    id: '2',
-    title: 'Smart Fitness Watch',
-    slug: 'smart-fitness-watch',
-    price: 199.99,
-    comparePrice: 249.99,
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-    rating: 4.8,
-    reviewCount: 89,
-    category: 'Electronics',
-    inStock: true,
-    isNew: false,
-  },
-  {
-    id: '3',
-    title: 'Premium Coffee Maker',
-    slug: 'premium-coffee-maker',
-    price: 79.99,
-    comparePrice: 99.99,
-    image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400',
-    rating: 4.3,
-    reviewCount: 156,
-    category: 'Home & Kitchen',
-    inStock: false,
-    isNew: true,
-  },
-  {
-    id: '4',
-    title: 'Ergonomic Office Chair',
-    slug: 'ergonomic-office-chair',
-    price: 299.99,
-    comparePrice: 399.99,
-    image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400',
-    rating: 4.7,
-    reviewCount: 67,
-    category: 'Furniture',
-    inStock: true,
-    isNew: false,
-  },
-]
-
-const categories = [
-  'All Categories',
-  'Electronics',
-  'Fashion',
-  'Home & Garden',
-  'Sports & Fitness',
-  'Books & Media',
-  'Beauty & Health',
-]
-
-const priceRanges = [
-  { label: 'All Prices', value: 'all' },
-  { label: 'Under $50', value: '0-50' },
-  { label: '$50 - $100', value: '50-100' },
-  { label: '$100 - $200', value: '100-200' },
-  { label: '$200 - $500', value: '200-500' },
-  { label: 'Over $500', value: '500+' },
-]
+import { apiClient } from '@/lib/api'
 
 export default function SearchPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '')
+  const [products, setProducts] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [sortBy, setSortBy] = useState('relevance')
-  const [selectedCategory, setSelectedCategory] = useState('All Categories')
-  const [selectedPriceRange, setSelectedPriceRange] = useState('all')
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [minPrice, setMinPrice] = useState<number | undefined>()
+  const [maxPrice, setMaxPrice] = useState<number | undefined>()
   const [showFilters, setShowFilters] = useState(false)
-  const [filteredResults, setFilteredResults] = useState(mockSearchResults)
   const { addItem } = useCart()
 
   useEffect(() => {
-    // Filter results based on search query and filters
-    let results = mockSearchResults
+    const performSearch = async () => {
+      if (!searchQuery.trim()) {
+        setProducts([])
+        return
+      }
 
-    // Filter by search query
-    if (searchQuery) {
-      results = results.filter(item =>
-        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
+      try {
+        setLoading(true)
+        const filters: any = {}
+        
+        if (selectedCategory !== 'all') {
+          filters.category = selectedCategory
+        }
+        
+        if (minPrice !== undefined) {
+          filters.minPrice = minPrice
+        }
+        
+        if (maxPrice !== undefined) {
+          filters.maxPrice = maxPrice
+        }
 
-    // Filter by category
-    if (selectedCategory !== 'All Categories') {
-      results = results.filter(item => item.category === selectedCategory)
-    }
+        if (sortBy === 'price-low') {
+          filters.sortBy = 'price'
+          filters.sortOrder = 'asc'
+        } else if (sortBy === 'price-high') {
+          filters.sortBy = 'price'
+          filters.sortOrder = 'desc'
+        } else if (sortBy === 'rating') {
+          filters.sortBy = 'averageRating'
+          filters.sortOrder = 'desc'
+        } else if (sortBy === 'newest') {
+          filters.sortBy = 'createdAt'
+          filters.sortOrder = 'desc'
+        }
 
-    // Filter by price range
-    if (selectedPriceRange !== 'all') {
-      const [min, max] = selectedPriceRange.split('-').map(Number)
-      if (max) {
-        results = results.filter(item => item.price >= min && item.price <= max)
-      } else {
-        results = results.filter(item => item.price >= min)
+        const response = await apiClient.search(searchQuery, filters)
+        if (response.success) {
+          setProducts(response.data.products || [])
+        }
+      } catch (error) {
+        console.error('Error searching:', error)
+      } finally {
+        setLoading(false)
       }
     }
 
-    setFilteredResults(results)
-  }, [searchQuery, selectedCategory, selectedPriceRange])
+    const timeoutId = setTimeout(() => {
+      performSearch()
+    }, 300) // Debounce search
 
-  const handleAddToCart = (product: any) => {
-    addItem(product.id)
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery, selectedCategory, minPrice, maxPrice, sortBy])
+
+  const handleAddToCart = async (product: any) => {
+    await addItem(product.id)
   }
 
-  const clearFilters = () => {
-    setSearchQuery('')
-    setSelectedCategory('All Categories')
-    setSelectedPriceRange('all')
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    router.push(`/search?q=${encodeURIComponent(searchQuery)}`)
   }
 
   return (
@@ -156,7 +113,7 @@ export default function SearchPage() {
           </h1>
           
           {/* Search Bar */}
-          <div className="flex flex-col lg:flex-row gap-4">
+          <form onSubmit={handleSearch} className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -173,6 +130,7 @@ export default function SearchPage() {
                 variant="outline"
                 onClick={() => setShowFilters(!showFilters)}
                 className="lg:hidden"
+                type="button"
               >
                 <SlidersHorizontal className="h-4 w-4 mr-2" />
                 Filters
@@ -181,6 +139,7 @@ export default function SearchPage() {
                 variant={viewMode === 'grid' ? 'default' : 'outline'}
                 size="icon"
                 onClick={() => setViewMode('grid')}
+                type="button"
               >
                 <Grid className="h-4 w-4" />
               </Button>
@@ -188,11 +147,12 @@ export default function SearchPage() {
                 variant={viewMode === 'list' ? 'default' : 'outline'}
                 size="icon"
                 onClick={() => setViewMode('list')}
+                type="button"
               >
                 <List className="h-4 w-4" />
               </Button>
             </div>
-          </div>
+          </form>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -202,68 +162,36 @@ export default function SearchPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Filters</h3>
-                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      setSelectedCategory('all')
+                      setMinPrice(undefined)
+                      setMaxPrice(undefined)
+                    }}
+                  >
                     Clear All
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Category Filter */}
-                <div>
-                  <h4 className="font-medium mb-3">Category</h4>
-                  <div className="space-y-2">
-                    {categories.map((category) => (
-                      <button
-                        key={category}
-                        onClick={() => setSelectedCategory(category)}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                          selectedCategory === category
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-muted'
-                        }`}
-                      >
-                        {category}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Price Range Filter */}
                 <div>
                   <h4 className="font-medium mb-3">Price Range</h4>
-                  <div className="space-y-2">
-                    {priceRanges.map((range) => (
-                      <button
-                        key={range.value}
-                        onClick={() => setSelectedPriceRange(range.value)}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                          selectedPriceRange === range.value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-muted'
-                        }`}
-                      >
-                        {range.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Availability Filter */}
-                <div>
-                  <h4 className="font-medium mb-3">Availability</h4>
-                  <div className="space-y-2">
-                    <label className="flex items-center space-x-2">
-                      <input type="checkbox" className="rounded" defaultChecked />
-                      <span className="text-sm">In Stock</span>
-                    </label>
-                    <label className="flex items-center space-x-2">
-                      <input type="checkbox" className="rounded" />
-                      <span className="text-sm">On Sale</span>
-                    </label>
-                    <label className="flex items-center space-x-2">
-                      <input type="checkbox" className="rounded" />
-                      <span className="text-sm">New Arrivals</span>
-                    </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Min"
+                      type="number"
+                      value={minPrice || ''}
+                      onChange={(e) => setMinPrice(e.target.value ? Number(e.target.value) : undefined)}
+                    />
+                    <Input
+                      placeholder="Max"
+                      type="number"
+                      value={maxPrice || ''}
+                      onChange={(e) => setMaxPrice(e.target.value ? Number(e.target.value) : undefined)}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -275,14 +203,21 @@ export default function SearchPage() {
             {/* Results Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
-                <p className="text-muted-foreground">
-                  {filteredResults.length} results found
-                </p>
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <p className="text-muted-foreground">
+                    {products.length} results found
+                  </p>
+                )}
                 {searchQuery && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setSearchQuery('')}
+                    onClick={() => {
+                      setSearchQuery('')
+                      router.push('/search')
+                    }}
                   >
                     <X className="h-4 w-4 mr-1" />
                     Clear search
@@ -304,12 +239,124 @@ export default function SearchPage() {
             </div>
 
             {/* Results Grid */}
-            {filteredResults.length > 0 ? (
+            {loading ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+              </div>
+            ) : products.length > 0 ? (
               <div className={
                 viewMode === 'grid' 
                   ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'
                   : 'space-y-4'
               }>
+                {products.map((product) => {
+                  const inStock = product.inventory && product.inventory.length > 0
+                    ? product.inventory.some((inv: any) => inv.quantity > 0)
+                    : true
+                  
+                  return (
+                    <Card key={product.id} className="group hover:shadow-lg transition-shadow">
+                      <CardContent className="p-0">
+                        <div className="relative overflow-hidden">
+                          <Link href={`/products/${product.slug}`}>
+                            <Image
+                              src={product.images?.[0]?.url || '/placeholder-product.jpg'}
+                              alt={product.images?.[0]?.alt || product.title}
+                              width={400}
+                              height={300}
+                              className={`w-full object-cover group-hover:scale-105 transition-transform duration-300 ${
+                                viewMode === 'grid' ? 'h-48' : 'h-32 w-32'
+                              }`}
+                            />
+                          </Link>
+                          {product.isFeatured && (
+                            <Badge className="absolute top-2 left-2 bg-green-500">
+                              Featured
+                            </Badge>
+                          )}
+                          {!inStock && (
+                            <Badge className="absolute top-2 right-2 bg-red-500">
+                              Out of Stock
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="p-4">
+                          <Link href={`/products/${product.slug}`}>
+                            <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors line-clamp-2">
+                              {product.title}
+                            </h3>
+                          </Link>
+                          <p className="text-sm text-muted-foreground mb-2">{product.category?.name}</p>
+                          
+                          <div className="flex items-center mb-3">
+                            <div className="flex items-center">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`h-4 w-4 ${
+                                    i < Math.floor(product.averageRating || 0)
+                                      ? 'text-yellow-400 fill-current'
+                                      : 'text-gray-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-sm text-muted-foreground ml-2">
+                              ({product.reviewCount || 0})
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-lg font-bold">
+                                {formatPrice(product.price)}
+                              </span>
+                              {product.comparePrice && (
+                                <span className="text-sm text-muted-foreground line-through">
+                                  {formatPrice(product.comparePrice)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <Button 
+                            className="w-full" 
+                            onClick={() => handleAddToCart(product)}
+                            disabled={!inStock}
+                          >
+                            <ShoppingCart className="h-4 w-4 mr-2" />
+                            {inStock ? 'Add to Cart' : 'Out of Stock'}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            ) : searchQuery ? (
+              <div className="text-center py-12">
+                <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">No products found</h3>
+                <p className="text-muted-foreground mb-4">
+                  Try adjusting your search or filter criteria
+                </p>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">Start searching</h3>
+                <p className="text-muted-foreground">
+                  Enter a search term to find products
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
                 {filteredResults.map((product) => (
                   <Card key={product.id} className="group hover:shadow-lg transition-shadow">
                     <CardContent className="p-0">

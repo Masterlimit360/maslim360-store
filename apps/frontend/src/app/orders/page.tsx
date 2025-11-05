@@ -1,7 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import Link from 'next/link'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -18,143 +21,35 @@ import {
   RotateCcw,
   Star,
   Download,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
+import { apiClient } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 
-const mockOrders = [
-  {
-    id: 'ORD-001',
-    date: '2024-01-15',
-    status: 'Delivered',
-    total: 299.99,
-    items: [
-      {
-        id: '1',
-        title: 'Wireless Bluetooth Headphones',
-        price: 99.99,
-        quantity: 2,
-        image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100',
-      },
-      {
-        id: '2',
-        title: 'Smart Fitness Watch',
-        price: 199.99,
-        quantity: 1,
-        image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100',
-      },
-    ],
-    shippingAddress: {
-      name: 'John Doe',
-      address: '123 Main Street',
-      city: 'Accra',
-      state: 'Greater Accra',
-      zipCode: '00233',
-      country: 'Ghana',
-    },
-    trackingNumber: 'TRK123456789',
-    estimatedDelivery: '2024-01-20',
-    actualDelivery: '2024-01-18',
-  },
-  {
-    id: 'ORD-002',
-    date: '2024-01-10',
-    status: 'Shipped',
-    total: 149.50,
-    items: [
-      {
-        id: '3',
-        title: 'Premium Coffee Maker',
-        price: 79.99,
-        quantity: 1,
-        image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=100',
-      },
-      {
-        id: '4',
-        title: 'Coffee Beans',
-        price: 69.51,
-        quantity: 1,
-        image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=100',
-      },
-    ],
-    shippingAddress: {
-      name: 'John Doe',
-      address: '123 Main Street',
-      city: 'Accra',
-      state: 'Greater Accra',
-      zipCode: '00233',
-      country: 'Ghana',
-    },
-    trackingNumber: 'TRK987654321',
-    estimatedDelivery: '2024-01-25',
-  },
-  {
-    id: 'ORD-003',
-    date: '2024-01-05',
-    status: 'Processing',
-    total: 89.99,
-    items: [
-      {
-        id: '5',
-        title: 'Ergonomic Office Chair',
-        price: 89.99,
-        quantity: 1,
-        image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=100',
-      },
-    ],
-    shippingAddress: {
-      name: 'John Doe',
-      address: '123 Main Street',
-      city: 'Accra',
-      state: 'Greater Accra',
-      zipCode: '00233',
-      country: 'Ghana',
-    },
-    estimatedDelivery: '2024-01-30',
-  },
-  {
-    id: 'ORD-004',
-    date: '2023-12-20',
-    status: 'Cancelled',
-    total: 199.99,
-    items: [
-      {
-        id: '6',
-        title: 'Designer Handbag',
-        price: 199.99,
-        quantity: 1,
-        image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=100',
-      },
-    ],
-    shippingAddress: {
-      name: 'John Doe',
-      address: '123 Main Street',
-      city: 'Accra',
-      state: 'Greater Accra',
-      zipCode: '00233',
-      country: 'Ghana',
-    },
-    cancellationReason: 'Changed mind',
-  },
-]
-
-const statusConfig = {
-  'Processing': {
+const statusConfig: Record<string, { color: string; icon: JSX.Element; description: string }> = {
+  'PENDING': {
     color: 'bg-yellow-100 text-yellow-800',
     icon: <RefreshCw className="h-4 w-4" />,
     description: 'Your order is being prepared',
   },
-  'Shipped': {
+  'PROCESSING': {
+    color: 'bg-yellow-100 text-yellow-800',
+    icon: <RefreshCw className="h-4 w-4" />,
+    description: 'Your order is being processed',
+  },
+  'SHIPPED': {
     color: 'bg-blue-100 text-blue-800',
     icon: <Truck className="h-4 w-4" />,
     description: 'Your order is on the way',
   },
-  'Delivered': {
+  'DELIVERED': {
     color: 'bg-green-100 text-green-800',
     icon: <CheckCircle className="h-4 w-4" />,
     description: 'Your order has been delivered',
   },
-  'Cancelled': {
+  'CANCELLED': {
     color: 'bg-red-100 text-red-800',
     icon: <XCircle className="h-4 w-4" />,
     description: 'Your order has been cancelled',
@@ -162,23 +57,61 @@ const statusConfig = {
 }
 
 export default function OrdersPage() {
+  const [orders, setOrders] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sortBy, setSortBy] = useState('newest')
+  const { isAuthenticated } = useAuth()
+  const router = useRouter()
 
-  const filteredOrders = mockOrders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         order.items.some(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    const matchesStatus = statusFilter === 'all' || order.status.toLowerCase() === statusFilter.toLowerCase()
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/auth/login')
+      return
+    }
+
+    const fetchOrders = async () => {
+      try {
+        setLoading(true)
+        const response = await apiClient.getOrders(1, 50)
+        if (response.success) {
+          setOrders(response.data.orders || [])
+        }
+      } catch (error) {
+        console.error('Error fetching orders:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchOrders()
+  }, [isAuthenticated, router])
+
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      await apiClient.cancelOrder(orderId)
+      setOrders(orders.map(order => 
+        order.id === orderId ? { ...order, status: 'CANCELLED' } : order
+      ))
+    } catch (error) {
+      console.error('Error cancelling order:', error)
+    }
+  }
+
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         order.items?.some((item: any) => item.product?.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+    const matchesStatus = statusFilter === 'all' || order.status?.toLowerCase() === statusFilter.toLowerCase()
     return matchesSearch && matchesStatus
   })
 
   const sortedOrders = [...filteredOrders].sort((a, b) => {
     switch (sortBy) {
       case 'newest':
-        return new Date(b.date).getTime() - new Date(a.date).getTime()
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       case 'oldest':
-        return new Date(a.date).getTime() - new Date(b.date).getTime()
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       case 'price-high':
         return b.total - a.total
       case 'price-low':
@@ -189,16 +122,23 @@ export default function OrdersPage() {
   })
 
   const getStatusConfig = (status: string) => {
-    return statusConfig[status as keyof typeof statusConfig] || statusConfig['Processing']
+    return statusConfig[status] || statusConfig['PENDING']
   }
 
-  const canReturn = (order: any) => {
-    return order.status === 'Delivered' && 
-           new Date().getTime() - new Date(order.actualDelivery || order.date).getTime() < 30 * 24 * 60 * 60 * 1000
+  const canCancel = (order: any) => {
+    return order.status === 'PENDING' || order.status === 'PROCESSING'
   }
 
-  const canReview = (order: any) => {
-    return order.status === 'Delivered'
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return null
   }
 
   return (
@@ -262,27 +202,27 @@ export default function OrdersPage() {
           <div className="space-y-6">
             {sortedOrders.length > 0 ? (
               sortedOrders.map((order) => {
-                const statusConfig = getStatusConfig(order.status)
+                const statusCfg = getStatusConfig(order.status)
                 return (
                   <Card key={order.id}>
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div>
-                            <h3 className="text-lg font-semibold">{order.id}</h3>
+                            <h3 className="text-lg font-semibold">{order.orderNumber || order.id}</h3>
                             <p className="text-sm text-muted-foreground">
-                              Ordered on {new Date(order.date).toLocaleDateString()}
+                              Ordered on {new Date(order.createdAt).toLocaleDateString()}
                             </p>
                           </div>
-                          <Badge className={statusConfig.color}>
-                            {statusConfig.icon}
+                          <Badge className={statusCfg.color}>
+                            {statusCfg.icon}
                             <span className="ml-1">{order.status}</span>
                           </Badge>
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-semibold">{formatPrice(order.total)}</p>
                           <p className="text-sm text-muted-foreground">
-                            {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                            {order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}
                           </p>
                         </div>
                       </div>
@@ -292,15 +232,17 @@ export default function OrdersPage() {
                       <div className="space-y-4 mb-6">
                         <h4 className="font-medium">Order Items</h4>
                         <div className="space-y-3">
-                          {order.items.map((item) => (
+                          {order.items?.map((item: any) => (
                             <div key={item.id} className="flex items-center gap-4 p-3 border rounded-lg">
-                              <img
-                                src={item.image}
-                                alt={item.title}
+                              <Image
+                                src={item.product?.images?.[0]?.url || '/placeholder-product.jpg'}
+                                alt={item.product?.title || 'Product'}
+                                width={64}
+                                height={64}
                                 className="w-16 h-16 object-cover rounded"
                               />
                               <div className="flex-1">
-                                <h5 className="font-medium">{item.title}</h5>
+                                <h5 className="font-medium">{item.product?.title || 'Product'}</h5>
                                 <p className="text-sm text-muted-foreground">
                                   Quantity: {item.quantity}
                                 </p>
@@ -321,10 +263,14 @@ export default function OrdersPage() {
                         <div>
                           <h4 className="font-medium mb-2">Shipping Address</h4>
                           <div className="text-sm text-muted-foreground">
-                            <p>{order.shippingAddress.name}</p>
-                            <p>{order.shippingAddress.address}</p>
-                            <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zipCode}</p>
-                            <p>{order.shippingAddress.country}</p>
+                            {order.shippingAddress && (
+                              <>
+                                <p>{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
+                                <p>{order.shippingAddress.street}</p>
+                                <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}</p>
+                                <p>{order.shippingAddress.country}</p>
+                              </>
+                            )}
                           </div>
                         </div>
                         <div>
@@ -333,14 +279,15 @@ export default function OrdersPage() {
                             {order.trackingNumber && (
                               <p>Tracking: {order.trackingNumber}</p>
                             )}
-                            {order.estimatedDelivery && (
-                              <p>Estimated Delivery: {new Date(order.estimatedDelivery).toLocaleDateString()}</p>
+                            <p>Subtotal: {formatPrice(order.subtotal)}</p>
+                            {order.shippingAmount > 0 && (
+                              <p>Shipping: {formatPrice(order.shippingAmount)}</p>
                             )}
-                            {order.actualDelivery && (
-                              <p>Delivered: {new Date(order.actualDelivery).toLocaleDateString()}</p>
+                            {order.taxAmount > 0 && (
+                              <p>Tax: {formatPrice(order.taxAmount)}</p>
                             )}
-                            {order.cancellationReason && (
-                              <p>Reason: {order.cancellationReason}</p>
+                            {order.discountAmount > 0 && (
+                              <p>Discount: -{formatPrice(order.discountAmount)}</p>
                             )}
                           </div>
                         </div>
@@ -348,34 +295,25 @@ export default function OrdersPage() {
 
                       {/* Order Actions */}
                       <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm">
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4 mr-2" />
-                          Invoice
-                        </Button>
+                        <Link href={`/orders/${order.id}`}>
+                          <Button variant="outline" size="sm">
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </Button>
+                        </Link>
                         {order.trackingNumber && (
                           <Button variant="outline" size="sm">
                             <Truck className="h-4 w-4 mr-2" />
                             Track Package
                           </Button>
                         )}
-                        {canReturn(order) && (
-                          <Button variant="outline" size="sm">
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            Return Item
-                          </Button>
-                        )}
-                        {canReview(order) && (
-                          <Button variant="outline" size="sm">
-                            <Star className="h-4 w-4 mr-2" />
-                            Write Review
-                          </Button>
-                        )}
-                        {order.status === 'Processing' && (
-                          <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                        {canCancel(order) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => handleCancelOrder(order.id)}
+                          >
                             Cancel Order
                           </Button>
                         )}
@@ -396,7 +334,9 @@ export default function OrdersPage() {
                     }
                   </p>
                   {!searchQuery && statusFilter === 'all' && (
-                    <Button>Start Shopping</Button>
+                    <Link href="/products">
+                      <Button>Start Shopping</Button>
+                    </Link>
                   )}
                 </CardContent>
               </Card>

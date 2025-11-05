@@ -5,13 +5,23 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
-  constructor(private configService: ConfigService) {
+  private configService: ConfigService;
+
+  constructor(configService: ConfigService) {
+    // super() must be the first statement - compute values inline
+    const clientID = configService.get('FACEBOOK_APP_ID');
+    const clientSecret = configService.get('FACEBOOK_APP_SECRET');
+    const frontendUrl = configService.get('FRONTEND_URL', 'http://localhost:3000');
+    const useDummy = !clientID || !clientSecret || clientID === 'your_facebook_app_id';
+
     super({
-      clientID: configService.get('FACEBOOK_APP_ID'),
-      clientSecret: configService.get('FACEBOOK_APP_SECRET'),
-      callbackURL: `${configService.get('FRONTEND_URL')}/api/auth/facebook/callback`,
+      clientID: useDummy ? 'dummy-app-id-for-startup' : clientID,
+      clientSecret: useDummy ? 'dummy-app-secret-for-startup' : clientSecret,
+      callbackURL: `${frontendUrl}/api/auth/facebook/callback`,
       profileFields: ['id', 'emails', 'name'],
     });
+
+    this.configService = configService;
   }
 
   async validate(
