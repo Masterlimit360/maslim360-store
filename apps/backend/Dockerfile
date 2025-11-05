@@ -1,7 +1,7 @@
 FROM node:18-alpine AS base
 
 # Install pnpm
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@9
 
 # Set working directory
 WORKDIR /app
@@ -24,7 +24,7 @@ RUN pnpm build
 FROM node:18-alpine AS production
 
 # Install pnpm
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@9
 
 WORKDIR /app
 

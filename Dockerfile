@@ -2,8 +2,8 @@
 # This assumes the build context is the repository root
 FROM node:18-alpine AS base
 
-# Install pnpm
-RUN npm install -g pnpm@8
+# Install pnpm 9.x to match lockfile version 9.0
+RUN npm install -g pnpm@9
 
 # Set working directory
 WORKDIR /app
@@ -28,8 +28,8 @@ RUN pnpm build
 # Production stage
 FROM node:18-alpine AS production
 
-# Install pnpm
-RUN npm install -g pnpm@8
+# Install pnpm 9.x to match lockfile version 9.0
+RUN npm install -g pnpm@9
 
 WORKDIR /app
 
