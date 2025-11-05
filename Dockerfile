@@ -49,5 +49,6 @@ WORKDIR /app/apps/backend
 
 EXPOSE 4000
 
-CMD ["node", "dist/main.js"]
+# Start from the correct directory
+CMD ["node", "./dist/main.js"]
 
