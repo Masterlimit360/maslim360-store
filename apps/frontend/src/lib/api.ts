@@ -1,3 +1,5 @@
+import axios from 'axios'
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
 interface ApiResponse<T> {
@@ -94,22 +96,35 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
-    const token = localStorage.getItem('token')
-    
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined
+
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
       ...options,
     }
 
     const response = await fetch(`${this.baseURL}${endpoint}`, config)
-    const data = await response.json()
+
+    let data: any = null
+    try {
+      // Attempt to parse JSON; if response is not JSON this will throw
+      data = await response.json()
+    } catch (err) {
+      // If parsing fails, fallback to text
+      try {
+        data = await response.text()
+      } catch (err2) {
+        data = null
+      }
+    }
 
     if (!response.ok) {
-      throw new Error(data.message || 'API request failed')
+      const message = data && typeof data === 'object' ? data.message || JSON.stringify(data) : data || response.statusText
+      throw new Error(`API request failed (${response.status}): ${message}`)
     }
 
     return data
@@ -403,32 +418,36 @@ class ApiClient {
 export const apiClient = new ApiClient(API_URL)
 export type { Product, Category, CartItem, Cart }
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Request interceptor to add auth token
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-// Response interceptor to handle errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized access
-      localStorage.removeItem('token')
-      window.location.href = '/auth/login'
+// Only attach interceptors in the browser
+if (typeof window !== 'undefined') {
+  // Request interceptor to add auth token
+  api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers = config.headers || {}
+      ;(config.headers as any).Authorization = `Bearer ${token}`
     }
-    return Promise.reject(error)
-  }
-)
+    return config
+  })
+
+  // Response interceptor to handle errors
+  api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        // Handle unauthorized access
+        localStorage.removeItem('token')
+        window.location.href = '/auth/login'
+      }
+      return Promise.reject(error)
+    }
+  )
+}
 
 export default api

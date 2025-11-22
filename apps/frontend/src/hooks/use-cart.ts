@@ -41,10 +41,8 @@ interface CartActions {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
-export const useCart = create<CartState & CartActions>()(
-  persist(
-    (set, get) => ({
-      items: [],
+const createCartStore = (set: any, get: any) => ({
+  items: [],
       subtotal: 0,
       itemCount: 0,
       isLoading: false,
@@ -201,14 +199,18 @@ export const useCart = create<CartState & CartActions>()(
           set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false })
         }
       },
-    }),
-    {
-      name: 'cart-storage',
-      partialize: (state) => ({
-        items: state.items,
-        subtotal: state.subtotal,
-        itemCount: state.itemCount,
-      }),
-    }
-  )
-)
+  })
+
+// Use persisted store only in the browser
+export const useCart = (typeof window !== 'undefined')
+  ? create<CartState & CartActions>()(
+      persist(createCartStore as any, {
+        name: 'cart-storage',
+        partialize: (state) => ({
+          items: state.items,
+          subtotal: state.subtotal,
+          itemCount: state.itemCount,
+        }),
+      }) as any
+    )
+  : create<CartState & CartActions>()(createCartStore as any)

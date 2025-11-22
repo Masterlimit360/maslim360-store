@@ -5,7 +5,13 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Search, Filter, Grid, List, Star, ShoppingCart, Heart } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { useCart } from '@/hooks/use-cart'
@@ -26,6 +32,8 @@ export default function ProductsPage() {
   const { addItem } = useCart()
 
   useEffect(() => {
+    let cancelled = false
+
     const fetchProducts = async () => {
       try {
         setLoading(true)
@@ -36,272 +44,142 @@ export default function ProductsPage() {
           sortOrder,
         }
 
-        if (searchQuery) {
-          params.search = searchQuery
+        if (searchQuery) params.search = searchQuery
+        if (priceRange && priceRange !== 'all') {
+          if (priceRange.includes('+')) {
+            params.minPrice = Number(priceRange.replace('+', ''))
+          } else if (priceRange.includes('-')) {
+            const [min, max] = priceRange.split('-').map(Number)
+            params.minPrice = min
+            params.maxPrice = max
+          }
         }
 
-        if (priceRange !== 'all') {
-          const [min, max] = priceRange.split('-').map(v => v === '+' ? undefined : parseFloat(v))
-          if (min !== undefined) params.minPrice = min
-          if (max !== undefined) params.maxPrice = max
-        }
+        const res = await apiClient.getProducts(params)
+        if (cancelled) return
 
-        const response = await apiClient.getProducts(params)
-        if (response.success) {
-          setProducts(response.data.products || [])
-          setTotal(response.data.total || 0)
+        const payload = (res && (res as any).data) ? (res as any).data : res
+
+        if (payload && payload.products) {
+          setProducts(payload.products)
+          setTotal(payload.total || 0)
+        } else if (Array.isArray(payload)) {
+          setProducts(payload)
+          setTotal(payload.length)
+        } else {
+          setProducts([])
+          setTotal(0)
         }
-      } catch (error) {
-        console.error('Error fetching products:', error)
+      } catch (err: any) {
+        console.error('Failed to fetch products', err?.message || err)
+        setProducts([])
+        setTotal(0)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     fetchProducts()
+
+    return () => {
+      cancelled = true
+    }
   }, [page, sortBy, sortOrder, priceRange, searchQuery])
 
-  const handleAddToCart = async (product: any) => {
-    await addItem(product.id)
-  }
-
-  const handleSortChange = (value: string) => {
-    switch (value) {
-      case 'newest':
-        setSortBy('createdAt')
-        setSortOrder('desc')
-        break
-      case 'price-low':
-        setSortBy('price')
-        setSortOrder('asc')
-        break
-      case 'price-high':
-        setSortBy('price')
-        setSortOrder('desc')
-        break
-      case 'rating':
-        setSortBy('averageRating')
-        setSortOrder('desc')
-        break
-      default:
-        setSortBy('createdAt')
-        setSortOrder('desc')
-    }
+  function handleAddToCart(product: any) {
+    addItem({
+      id: product.id,
+      product,
+      quantity: 1,
+    })
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-4">All Products</h1>
-          <p className="text-muted-foreground">
-            Discover our complete collection of quality products
+    <div className="container mx-auto py-8">
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Search products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-72"
+          />
+          <Button variant="outline" size="icon">
+            <Search className="h-4 w-4" />
+          </Button>
+
+          <Select onValueChange={(val) => setPriceRange(val)}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Price range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Prices</SelectItem>
+              <SelectItem value="0-50">Under $50</SelectItem>
+              <SelectItem value="50-100">$50 - $100</SelectItem>
+              <SelectItem value="100-200">$100 - $200</SelectItem>
+              <SelectItem value="200+">Over $200</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="icon">
+            <Filter className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* View Toggle & Summary */}
+        <div className="flex items-center gap-4">
+          <p className="text-sm text-muted-foreground">
+            Showing {products.length} of {total} products
           </p>
-        </div>
-
-        {/* Filters and Search */}
-        <div className="mb-8 space-y-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search products..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            {/* Filters */}
-            <div className="flex gap-4">
-              <Select value={sortBy === 'createdAt' && sortOrder === 'desc' ? 'newest' : sortBy === 'price' && sortOrder === 'asc' ? 'price-low' : sortBy === 'price' && sortOrder === 'desc' ? 'price-high' : 'rating'} onValueChange={handleSortChange}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">Newest</SelectItem>
-                  <SelectItem value="price-low">Price: Low to High</SelectItem>
-                  <SelectItem value="price-high">Price: High to Low</SelectItem>
-                  <SelectItem value="rating">Highest Rated</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={priceRange} onValueChange={setPriceRange}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Price range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Prices</SelectItem>
-                  <SelectItem value="0-50">Under $50</SelectItem>
-                  <SelectItem value="50-100">$50 - $100</SelectItem>
-                  <SelectItem value="100-200">$100 - $200</SelectItem>
-                  <SelectItem value="200+">Over $200</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Button variant="outline" size="icon">
-                <Filter className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* View Toggle */}
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Showing {products.length} of {total} products
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'outline'}
-                size="icon"
-                onClick={() => setViewMode('grid')}
-              >
-                <Grid className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'outline'}
-                size="icon"
-                onClick={() => setViewMode('list')}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Products Grid */}
-        {loading ? (
-          <div className="text-center py-12">Loading products...</div>
-        ) : products.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">No products found</div>
-        ) : (
-          <div className={
-            viewMode === 'grid' 
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-              : 'space-y-4'
-          }>
-            {products.map((product) => (
-              <Card key={product.id} className="group hover:shadow-lg transition-shadow">
-                <CardContent className="p-0">
-                  <div className="relative overflow-hidden">
-                    <Link href={`/products/${product.slug}`}>
-                      <Image
-                        src={product.images?.[0]?.url || '/placeholder-product.jpg'}
-                        alt={product.images?.[0]?.alt || product.title}
-                        width={400}
-                        height={300}
-                        className={`w-full object-cover group-hover:scale-105 transition-transform duration-300 ${
-                          viewMode === 'grid' ? 'h-48' : 'h-32 w-32'
-                        }`}
-                      />
-                    </Link>
-                    {product.isFeatured && (
-                      <Badge className="absolute top-2 left-2 bg-green-500">
-                        Featured
-                      </Badge>
-                    )}
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button size="icon" variant="secondary" className="h-8 w-8">
-                        <Heart className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <Link href={`/products/${product.slug}`}>
-                          <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors line-clamp-2">
-                            {product.title}
-                          </h3>
-                        </Link>
-                        <p className="text-sm text-muted-foreground">{product.category?.name}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center mb-3">
-                      <div className="flex items-center">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`h-4 w-4 ${
-                              i < Math.floor(product.averageRating || 0)
-                                ? 'text-yellow-400 fill-current'
-                                : 'text-gray-300'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-sm text-muted-foreground ml-2">
-                        ({product.reviewCount || 0})
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-lg font-bold">
-                          {formatPrice(product.price)}
-                        </span>
-                        {product.comparePrice && (
-                          <span className="text-sm text-muted-foreground line-through">
-                            {formatPrice(product.comparePrice)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <Button 
-                      className="w-full" 
-                      onClick={() => handleAddToCart(product)}
-                    >
-                      <ShoppingCart className="h-4 w-4 mr-2" />
-                      Add to Cart
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        <div className="mt-12 flex justify-center">
           <div className="flex gap-2">
-            <Button variant="outline" disabled>Previous</Button>
-            <Button variant="default">1</Button>
-            <Button variant="outline">2</Button>
-            <Button variant="outline">3</Button>
-            <Button variant="outline">Next</Button>
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('grid')}
+            >
+              <Grid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('list')}
+            >
+              <List className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
-    </div>
-  )
-}
 
-        <div className={
-          viewMode === 'grid' 
-            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-            : 'space-y-4'
-        }>
-          {mockProducts.map((product) => (
+      {/* Products Grid */}
+      {loading ? (
+        <div className="text-center py-12">Loading products...</div>
+      ) : products.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">No products found</div>
+      ) : (
+        <div
+          className={
+            viewMode === 'grid'
+              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
+              : 'space-y-4'
+          }
+        >
+          {products.map((product) => (
             <Card key={product.id} className="group hover:shadow-lg transition-shadow">
               <CardContent className="p-0">
                 <div className="relative overflow-hidden">
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    className={`w-full object-cover group-hover:scale-105 transition-transform duration-300 ${
-                      viewMode === 'grid' ? 'h-48' : 'h-32 w-32'
-                    }`}
-                  />
-                  {product.isNew && (
-                    <Badge className="absolute top-2 left-2 bg-green-500">
-                      New
-                    </Badge>
+                  <Link href={`/products/${product.slug}`}>
+                    <Image
+                      src={product.images?.[0]?.url || '/placeholder-product.jpg'}
+                      alt={product.images?.[0]?.alt || product.title}
+                      width={400}
+                      height={300}
+                      className={`w-full object-cover group-hover:scale-105 transition-transform duration-300 ${
+                        viewMode === 'grid' ? 'h-48' : 'h-32 w-32'
+                      }`}
+                    />
+                  </Link>
+                  {product.isFeatured && (
+                    <Badge className="absolute top-2 left-2 bg-green-500">Featured</Badge>
                   )}
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button size="icon" variant="secondary" className="h-8 w-8">
@@ -312,48 +190,39 @@ export default function ProductsPage() {
                 <div className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
-                      <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors line-clamp-2">
-                        {product.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">{product.category}</p>
+                      <Link href={`/products/${product.slug}`}>
+                        <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors line-clamp-2">
+                          {product.title}
+                        </h3>
+                      </Link>
+                      <p className="text-sm text-muted-foreground">{product.category?.name}</p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center mb-3">
                     <div className="flex items-center">
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
                           className={`h-4 w-4 ${
-                            i < Math.floor(product.rating)
-                              ? 'text-yellow-400 fill-current'
-                              : 'text-gray-300'
+                            i < Math.floor(product.averageRating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300'
                           }`}
                         />
                       ))}
                     </div>
-                    <span className="text-sm text-muted-foreground ml-2">
-                      ({product.reviewCount})
-                    </span>
+                    <span className="text-sm text-muted-foreground ml-2">({product.reviewCount || 0})</span>
                   </div>
 
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-2">
-                      <span className="text-lg font-bold">
-                        {formatPrice(product.price)}
-                      </span>
+                      <span className="text-lg font-bold">{formatPrice(product.price)}</span>
                       {product.comparePrice && (
-                        <span className="text-sm text-muted-foreground line-through">
-                          {formatPrice(product.comparePrice)}
-                        </span>
+                        <span className="text-sm text-muted-foreground line-through">{formatPrice(product.comparePrice)}</span>
                       )}
                     </div>
                   </div>
 
-                  <Button 
-                    className="w-full" 
-                    onClick={() => handleAddToCart(product)}
-                  >
+                  <Button className="w-full" onClick={() => handleAddToCart(product)}>
                     <ShoppingCart className="h-4 w-4 mr-2" />
                     Add to Cart
                   </Button>
@@ -362,16 +231,18 @@ export default function ProductsPage() {
             </Card>
           ))}
         </div>
+      )}
 
-        {/* Pagination */}
-        <div className="mt-12 flex justify-center">
-          <div className="flex gap-2">
-            <Button variant="outline" disabled>Previous</Button>
-            <Button variant="default">1</Button>
-            <Button variant="outline">2</Button>
-            <Button variant="outline">3</Button>
-            <Button variant="outline">Next</Button>
-          </div>
+      {/* Pagination */}
+      <div className="mt-12 flex justify-center">
+        <div className="flex gap-2">
+          <Button variant="outline" disabled>
+            Previous
+          </Button>
+          <Button variant="default">1</Button>
+          <Button variant="outline">2</Button>
+          <Button variant="outline">3</Button>
+          <Button variant="outline">Next</Button>
         </div>
       </div>
     </div>
