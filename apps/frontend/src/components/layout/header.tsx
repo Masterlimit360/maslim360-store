@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useCart } from '@/hooks/use-cart'
+import { useAuth } from '@/hooks/use-auth'
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const { itemCount } = useCart()
+  const { user, isAuthenticated } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -79,11 +81,23 @@ export function Header() {
             </Link>
 
             {/* User Menu */}
-            <Link href="/auth/login">
-              <Button variant="ghost" size="icon">
-                <User className="h-5 w-5" />
-              </Button>
-            </Link>
+            {isAuthenticated && user ? (
+              <Link href="/profile">
+                <Button variant="ghost" size="icon" className="p-0">
+                  {user.avatar ? (
+                    <Image src={user.avatar} alt={user.firstName || 'User'} width={32} height={32} className="rounded-full" />
+                  ) : (
+                    <User className="h-5 w-5" />
+                  )}
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/auth/login">
+                <Button variant="ghost" size="icon">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+            )}
 
             {/* Mobile Menu Button */}
             <Button
