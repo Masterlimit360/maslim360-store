@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -16,8 +16,9 @@ export class ProductsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new product (Admin only)' })
   @ApiResponse({ status: 201, description: 'Product created successfully' })
-  async create(@Body() createProductDto: CreateProductDto) {
-    return this.productsService.create(createProductDto);
+  async create(@Req() req, @Body() createProductDto: CreateProductDto) {
+    // pass authenticated user to service so product can be linked to vendor profile
+    return this.productsService.create(createProductDto, req.user);
   }
 
   @Get()

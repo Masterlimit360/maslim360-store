@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -8,12 +8,19 @@ import { ProductQueryDto } from './dto/product-query.dto';
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createProductDto: CreateProductDto) {
+  async create(createProductDto: CreateProductDto, user: any) {
     const { categoryId, variants, images, ...productData } = createProductDto;
+
+    // Ensure the authenticated user has a vendor profile
+    const vendor = await this.prisma.vendorProfile.findUnique({ where: { userId: user.id } });
+    if (!vendor) {
+      throw new ForbiddenException('Only registered sellers can create products');
+    }
 
     return this.prisma.product.create({
       data: {
         ...productData,
+        vendor: { connect: { id: vendor.id } },
         tags: productData.tags ? JSON.stringify(productData.tags) : '[]',
         attributes: productData.attributes ? JSON.stringify(productData.attributes) : null,
         dimensions: productData.dimensions ? JSON.stringify(productData.dimensions) : null,

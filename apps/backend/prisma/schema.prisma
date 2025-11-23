@@ -93,6 +93,8 @@ model Product {
   metaDescription  String?
   tags             String
   attributes       String?
+  vendorId         String?
+  vendor           VendorProfile?   @relation(fields: [vendorId], references: [id])
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   categoryId       String
@@ -335,17 +337,18 @@ model AuditLog {
 }
 
 model VendorProfile {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   businessName String
   description  String?
   website      String?
   logo         String?
-  isVerified   Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isVerified   Boolean   @default(false)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products     Product[]
 
   @@map("vendor_profiles")
 }
