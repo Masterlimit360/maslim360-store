@@ -87,11 +87,8 @@ export default function ProductsPage() {
   }, [page, sortBy, sortOrder, priceRange, searchQuery])
 
   function handleAddToCart(product: any) {
-    addItem({
-      id: product.id,
-      product,
-      quantity: 1,
-    })
+    // `use-cart.addItem` expects arguments: (productId, variantId?, quantity?)
+    addItem(product.id, undefined, 1)
   }
 
   return (

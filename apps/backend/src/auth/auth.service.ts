@@ -15,7 +15,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const { email, password, firstName, lastName } = registerDto;
+    const { email, password, firstName, lastName, isSeller, businessName } = registerDto;
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -38,6 +38,22 @@ export class AuthService {
         lastName,
       },
     });
+
+    // If registering as a seller, create a VendorProfile linked to the user
+    if (isSeller) {
+      try {
+        const business = businessName?.trim() || `${firstName || ''} ${lastName || ''}`.trim() || email;
+        await this.prisma.vendorProfile.create({
+          data: {
+            businessName: business,
+            userId: user.id,
+          },
+        });
+      } catch (err) {
+        // Non-fatal: log and continue
+        console.warn('Failed to create vendor profile for new user', err);
+      }
+    }
 
     // Generate JWT token
     const payload = { sub: user.id, email: user.email };

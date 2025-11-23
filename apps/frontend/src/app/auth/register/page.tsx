@@ -22,6 +22,8 @@ export default function RegisterPage() {
     password: '',
     confirmPassword: '',
     agreeToTerms: false,
+    isSeller: false,
+    businessName: '',
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -37,8 +39,38 @@ export default function RegisterPage() {
       return
     }
     
-    // Handle registration logic here
-    toast.success('Account created successfully!')
+    // Call backend register
+    (async () => {
+      try {
+        const body = {
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          isSeller: formData.isSeller,
+          businessName: formData.businessName || undefined,
+        }
+
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.message || 'Registration failed')
+
+        // Save token and redirect
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('token', data.token)
+        }
+        toast.success('Account created successfully!')
+        // redirect to home
+        window.location.href = '/'
+      } catch (err: any) {
+        toast.error(err?.message || 'Registration failed')
+      }
+    })()
   }
 
   const handleGoogleLogin = () => {
@@ -228,6 +260,31 @@ export default function RegisterPage() {
                     </Link>
                   </Label>
                 </div>
+
+                <div className="flex items-center space-x-2 mt-2">
+                  <Checkbox
+                    id="isSeller"
+                    checked={formData.isSeller}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isSeller: checked as boolean })}
+                  />
+                  <Label htmlFor="isSeller" className="text-sm">
+                    Register as a <strong>seller/vendor</strong>
+                  </Label>
+                </div>
+
+                {formData.isSeller && (
+                  <div className="space-y-2 mt-2">
+                    <Label htmlFor="businessName">Business Name</Label>
+                    <Input
+                      id="businessName"
+                      type="text"
+                      placeholder="Your business or store name"
+                      value={formData.businessName}
+                      onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                      required={formData.isSeller}
+                    />
+                  </div>
+                )}
 
                 <Button type="submit" className="w-full" size="lg">
                   Create Account
