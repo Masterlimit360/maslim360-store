@@ -89,4 +89,15 @@ export class UsersController {
   async removeFromWishlist(@Req() req, @Param('productId') productId: string) {
     return this.usersService.removeFromWishlist(req.user.id, productId);
   }
+
+  @Get('me/is-seller')
+  @ApiOperation({ summary: 'Check if user is a seller' })
+  @ApiResponse({ status: 200, description: 'Seller status retrieved' })
+  async isSeller(@Req() req) {
+    const user = await this.usersService.findById(req.user.id);
+    return {
+      isSeller: user.isSeller || false,
+      vendorProfile: user.vendorProfile || null,
+    };
+  }
 }

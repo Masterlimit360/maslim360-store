@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -17,13 +17,70 @@ export class ProductsService {
       throw new ForbiddenException('Only registered sellers can create products');
     }
 
+    // Ensure SKU is unique
+    let sku = productData.sku;
+    if (!sku) {
+      // Generate a unique SKU if not provided
+      sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    }
+
+    // Check if SKU already exists, if so generate a new one
+    let skuExists = await this.prisma.product.findUnique({ where: { sku } });
+    let attempts = 0;
+    while (skuExists && attempts < 10) {
+      sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      skuExists = await this.prisma.product.findUnique({ where: { sku } });
+      attempts++;
+    }
+
+    if (skuExists) {
+      throw new BadRequestException('Unable to generate unique SKU. Please try again.');
+    }
+
+    // Ensure slug is unique
+    let slug = productData.slug;
+    if (!slug) {
+      slug = productData.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `product-${Date.now()}`;
+    }
+
+    // Check if slug already exists, if so append a suffix
+    let slugExists = await this.prisma.product.findUnique({ where: { slug } });
+    let slugAttempts = 0;
+    const originalSlug = slug;
+    while (slugExists && slugAttempts < 10) {
+      slug = `${originalSlug}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+      slugExists = await this.prisma.product.findUnique({ where: { slug } });
+      slugAttempts++;
+    }
+
+    // Handle tags - if it's already a JSON string, use it; otherwise stringify
+    let tagsValue = '[]';
+    if (productData.tags) {
+      if (typeof productData.tags === 'string') {
+        // Check if it's already a valid JSON string
+        try {
+          JSON.parse(productData.tags);
+          tagsValue = productData.tags;
+        } catch {
+          // If not valid JSON, treat as comma-separated string and convert to array
+          const tagsArray = productData.tags.split(',').map(t => t.trim()).filter(Boolean);
+          tagsValue = JSON.stringify(tagsArray);
+        }
+      } else {
+        // If it's an array or object, stringify it
+        tagsValue = JSON.stringify(productData.tags);
+      }
+    }
+
     return this.prisma.product.create({
       data: {
         ...productData,
+        sku, // Use the unique SKU
+        slug, // Use the unique slug
         vendor: { connect: { id: vendor.id } },
-        tags: productData.tags ? JSON.stringify(productData.tags) : '[]',
-        attributes: productData.attributes ? JSON.stringify(productData.attributes) : null,
-        dimensions: productData.dimensions ? JSON.stringify(productData.dimensions) : null,
+        tags: tagsValue,
+        attributes: productData.attributes ? (typeof productData.attributes === 'string' ? productData.attributes : JSON.stringify(productData.attributes)) : null,
+        dimensions: productData.dimensions ? (typeof productData.dimensions === 'string' ? productData.dimensions : JSON.stringify(productData.dimensions)) : null,
         category: {
           connect: { id: categoryId },
         },
@@ -147,7 +204,7 @@ export class ProductsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, includeInactive = false) {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
@@ -180,6 +237,11 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
+    // Check if product is active (unless explicitly including inactive)
+    if (!includeInactive && !product.isActive) {
+      throw new NotFoundException('Product not found');
+    }
+
     // Calculate average rating
     const ratings = product.reviews.map(review => review.rating);
     const averageRating = ratings.length > 0 
@@ -193,7 +255,7 @@ export class ProductsService {
     };
   }
 
-  async findBySlug(slug: string) {
+  async findBySlug(slug: string, includeInactive = false) {
     const product = await this.prisma.product.findUnique({
       where: { slug },
       include: {
@@ -223,6 +285,11 @@ export class ProductsService {
     });
 
     if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    // Check if product is active (unless explicitly including inactive)
+    if (!includeInactive && !product.isActive) {
       throw new NotFoundException('Product not found');
     }
 
@@ -279,11 +346,97 @@ export class ProductsService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: any) {
+    // Check if user is the owner of the product
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: { vendor: true },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    // Check if user has vendor profile
+    const vendor = await this.prisma.vendorProfile.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!vendor) {
+      throw new ForbiddenException('Only sellers can delete products');
+    }
+
+    // Check if product belongs to this vendor
+    if (product.vendorId !== vendor.id) {
+      throw new ForbiddenException('You can only delete your own products');
+    }
+
+    // Soft delete by setting isActive to false
     return this.prisma.product.update({
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  async getSellerProducts(userId: string, page = 1, limit = 20) {
+    // Get vendor profile for the user
+    const vendor = await this.prisma.vendorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!vendor) {
+      throw new ForbiddenException('User is not a seller');
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [products, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { vendorId: vendor.id },
+        include: {
+          category: true,
+          images: {
+            where: { isPrimary: true },
+            take: 1,
+          },
+          reviews: {
+            select: {
+              rating: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.product.count({
+        where: { vendorId: vendor.id },
+      }),
+    ]);
+
+    // Calculate average rating for each product
+    const productsWithRating = products.map(product => {
+      const ratings = product.reviews.map(review => review.rating);
+      const averageRating = ratings.length > 0 
+        ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length 
+        : 0;
+
+      return {
+        ...product,
+        averageRating: Math.round(averageRating * 10) / 10,
+        reviewCount: ratings.length,
+      };
+    });
+
+    return {
+      products: productsWithRating,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async getFeatured(limit = 10) {

@@ -3,13 +3,17 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Orders')
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create order from cart' })
@@ -37,10 +41,15 @@ export class OrdersController {
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update order status (admin)' })
+  @ApiOperation({ summary: 'Update order status (seller can update orders for their products)' })
   @ApiResponse({ status: 200, description: 'Order status updated' })
-  async updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.ordersService.updateStatus(id, status);
+  async updateStatus(@Req() req, @Param('id') id: string, @Body('status') status: string) {
+    // Get vendor profile if user is a seller
+    const vendor = await this.prisma.vendorProfile.findUnique({
+      where: { userId: req.user.id },
+    });
+
+    return this.ordersService.updateStatus(id, status, req.user.id, vendor?.id);
   }
 
   @Patch(':id/cancel')
@@ -49,4 +58,14 @@ export class OrdersController {
   async cancel(@Req() req, @Param('id') id: string) {
     return this.ordersService.cancel(id, req.user.id);
   }
-}
+
+  @Get('seller/orders')
+  @ApiOperation({ summary: 'Get orders for seller\'s products' })
+  @ApiResponse({ status: 200, description: 'Seller orders retrieved successfully' })
+  async getSellerOrders(
+    @Req() req,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.ordersService.getSellerOrders(req.user.id, +page, +limit);
+  }

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import toast from 'react-hot-toast'
 
 interface CartItem {
   id: string
@@ -54,7 +55,7 @@ const createCartStore = (set: any, get: any) => ({
       fetchCart: async () => {
         set({ isLoading: true, error: null })
         try {
-          const token = localStorage.getItem('token')
+          const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
           if (!token) {
             set({ items: [], subtotal: 0, itemCount: 0, isLoading: false })
             return
@@ -68,14 +69,21 @@ const createCartStore = (set: any, get: any) => ({
           })
 
           if (!response.ok) {
+            if (response.status === 401) {
+              // User not authenticated, clear cart
+              set({ items: [], subtotal: 0, itemCount: 0, isLoading: false })
+              return
+            }
             throw new Error('Failed to fetch cart')
           }
 
           const data = await response.json()
+          // Handle both wrapped and direct response formats
+          const cartData = data.data || data
           set({
-            items: data.items || [],
-            subtotal: data.subtotal || 0,
-            itemCount: data.itemCount || 0,
+            items: cartData.items || [],
+            subtotal: cartData.subtotal || 0,
+            itemCount: cartData.itemCount || 0,
             isLoading: false,
           })
         } catch (error) {
@@ -91,28 +99,65 @@ const createCartStore = (set: any, get: any) => ({
             throw new Error('Please log in to add items to cart')
           }
 
+          if (!productId) {
+            throw new Error('Product ID is required')
+          }
+
+          const payload: any = {
+            productId,
+            quantity: Number(quantity) || 1,
+          }
+
+          if (variantId) {
+            payload.variantId = variantId
+          }
+
           const response = await fetch(`${API_URL}/cart/items`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              productId,
-              variantId,
-              quantity,
-            }),
+            body: JSON.stringify(payload),
           })
 
           if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.message || 'Failed to add item to cart')
+            let errorMessage = 'Failed to add item to cart'
+            try {
+              const errorData = await response.json()
+              // Handle NestJS validation errors (array format)
+              if (Array.isArray(errorData.message)) {
+                errorMessage = errorData.message.join(', ') || errorMessage
+              } else {
+                errorMessage = errorData.message || errorData.error || errorMessage
+              }
+            } catch {
+              // If response is not JSON, try to get text
+              try {
+                const errorText = await response.text()
+                errorMessage = errorText || errorMessage
+              } catch {
+                // If that also fails, use status text
+                errorMessage = response.statusText || errorMessage
+              }
+            }
+            throw new Error(errorMessage)
           }
 
           // Refresh cart after adding item
           await get().fetchCart()
+          
+          // Show success notification
+          toast.success('Item added to cart!')
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false })
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          set({ error: errorMessage, isLoading: false })
+          
+          // Show error notification
+          toast.error(errorMessage)
+          throw error // Re-throw to allow components to handle
+        } finally {
+          set({ isLoading: false })
         }
       },
 
@@ -134,8 +179,19 @@ const createCartStore = (set: any, get: any) => ({
           })
 
           if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.message || 'Failed to update cart item')
+            let errorMessage = 'Failed to update cart item'
+            try {
+              const errorData = await response.json()
+              errorMessage = errorData.message || errorData.error || errorMessage
+            } catch {
+              try {
+                const errorText = await response.text()
+                errorMessage = errorText || errorMessage
+              } catch {
+                errorMessage = response.statusText || errorMessage
+              }
+            }
+            throw new Error(errorMessage)
           }
 
           // Refresh cart after updating item
@@ -162,8 +218,19 @@ const createCartStore = (set: any, get: any) => ({
           })
 
           if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.message || 'Failed to remove cart item')
+            let errorMessage = 'Failed to remove cart item'
+            try {
+              const errorData = await response.json()
+              errorMessage = errorData.message || errorData.error || errorMessage
+            } catch {
+              try {
+                const errorText = await response.text()
+                errorMessage = errorText || errorMessage
+              } catch {
+                errorMessage = response.statusText || errorMessage
+              }
+            }
+            throw new Error(errorMessage)
           }
 
           // Refresh cart after removing item
@@ -190,8 +257,19 @@ const createCartStore = (set: any, get: any) => ({
           })
 
           if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.message || 'Failed to clear cart')
+            let errorMessage = 'Failed to clear cart'
+            try {
+              const errorData = await response.json()
+              errorMessage = errorData.message || errorData.error || errorMessage
+            } catch {
+              try {
+                const errorText = await response.text()
+                errorMessage = errorText || errorMessage
+              } catch {
+                errorMessage = response.statusText || errorMessage
+              }
+            }
+            throw new Error(errorMessage)
           }
 
           set({ items: [], subtotal: 0, itemCount: 0, isLoading: false })

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,8 +12,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
 import { Eye, EyeOff, Mail, Lock, User, ArrowLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function RegisterPage() {
+  const router = useRouter()
+  const { setUser, setToken, isLoading } = useAuth()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [formData, setFormData] = useState({
@@ -26,11 +31,21 @@ export default function RegisterPage() {
     businessName: '',
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match')
+      return
+    }
+    
+    if (formData.password.length < 6) {
+      toast.error('Password must be at least 6 characters long')
       return
     }
     
@@ -38,49 +53,62 @@ export default function RegisterPage() {
       toast.error('Please agree to the terms and conditions')
       return
     }
+
+    if (formData.isSeller && !formData.businessName?.trim()) {
+      toast.error('Please provide a business name for seller accounts')
+      return
+    }
     
-    // Call backend register
-    (async () => {
-      try {
-        const body = {
-          email: formData.email,
-          password: formData.password,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          isSeller: formData.isSeller,
-          businessName: formData.businessName || undefined,
-        }
-
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.message || 'Registration failed')
-
-        // Save token and redirect
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('token', data.token)
-        }
-        toast.success('Account created successfully!')
-        // redirect to home
-        window.location.href = '/'
-      } catch (err: any) {
-        toast.error(err?.message || 'Registration failed')
+    setIsSubmitting(true)
+    try {
+      // Call API directly to support seller registration
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+      const body = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        ...(formData.isSeller && {
+          isSeller: true,
+          businessName: formData.businessName,
+        }),
       }
-    })()
+
+      const response = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || 'Registration failed')
+
+      // Update auth state
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('token', data.token)
+      }
+      
+      // Update the auth store
+      setUser(data.user)
+      setToken(data.token)
+
+      toast.success('Account created successfully!')
+      router.push('/')
+    } catch (err: any) {
+      toast.error(err?.message || 'Registration failed')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleGoogleLogin = () => {
-    // Handle Google OAuth
-    toast.success('Google registration initiated!')
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+    window.location.href = `${API_URL}/auth/google`
   }
 
   const handleFacebookLogin = () => {
-    // Handle Facebook OAuth
-    toast.success('Facebook registration initiated!')
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+    window.location.href = `${API_URL}/auth/facebook`
   }
 
   return (
@@ -286,8 +314,8 @@ export default function RegisterPage() {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full" size="lg">
-                  Create Account
+                <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+                  {isSubmitting ? 'Creating Account...' : 'Create Account'}
                 </Button>
               </form>
 

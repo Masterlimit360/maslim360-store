@@ -27,6 +27,7 @@ import { formatPrice } from '@/lib/utils'
 import { useCart } from '@/hooks/use-cart'
 import { apiClient } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
+import toast from 'react-hot-toast'
 
 export default function CheckoutPage() {
   const router = useRouter()
@@ -62,6 +63,10 @@ export default function CheckoutPage() {
     
     // Payment Information
     paymentMethod: 'card',
+    cardName: '',
+    cardNumber: '',
+    expiryDate: '',
+    cvv: '',
     
     // Order Notes
     notes: '',
@@ -214,12 +219,14 @@ export default function CheckoutPage() {
       }
 
       // Step 5: Clear cart and redirect
-      clearCart()
+      await clearCart()
       router.push(`/orders/${order.id}?success=true`)
     } catch (error: any) {
       console.error('Error placing order:', error)
-      setError(error.message || 'Failed to place order. Please try again.')
+      const errorMessage = error.message || 'Failed to place order. Please try again.'
+      setError(errorMessage)
       setLoading(false)
+      toast.error(errorMessage)
     }
   }
 

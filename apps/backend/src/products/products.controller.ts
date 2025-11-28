@@ -58,21 +58,34 @@ export class ProductsController {
     return this.productsService.getRelated(id, +limit);
   }
 
+  @Get('seller/my-products')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get seller\'s products' })
+  @ApiResponse({ status: 200, description: 'Products retrieved successfully' })
+  async getSellerProducts(
+    @Req() req,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.productsService.getSellerProducts(req.user.id, +page, +limit);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update product (Admin only)' })
+  @ApiOperation({ summary: 'Update product (Seller/Admin only)' })
   @ApiResponse({ status: 200, description: 'Product updated successfully' })
-  async update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
+  async update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto, @Req() req) {
     return this.productsService.update(id, updateProductDto);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete product (Admin only)' })
+  @ApiOperation({ summary: 'Delete product (Seller can delete own products)' })
   @ApiResponse({ status: 200, description: 'Product deleted successfully' })
-  async remove(@Param('id') id: string) {
-    return this.productsService.remove(id);
+  async remove(@Param('id') id: string, @Req() req) {
+    return this.productsService.remove(id, req.user);
   }
 }

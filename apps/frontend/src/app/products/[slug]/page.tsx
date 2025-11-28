@@ -75,9 +75,14 @@ export default function ProductDetailPage() {
               // Wishlist check failed, ignore
             }
           }
+        } else {
+          // Product not found or inactive
+          setProduct(null)
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching product:', error)
+        // Product not found or inactive
+        setProduct(null)
       } finally {
         setLoading(false)
       }
@@ -90,7 +95,14 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = async () => {
     if (!product) return
-    await addItem(product.id, selectedVariant, quantity)
+    
+    try {
+      await addItem(product.id, selectedVariant, quantity)
+      // Success toast is handled in the cart hook
+    } catch (error: any) {
+      // Error toast is handled in the cart hook
+      console.error('Failed to add to cart:', error)
+    }
   }
 
   const handleToggleWishlist = async () => {
@@ -113,6 +125,36 @@ export default function ProductDetailPage() {
     const newQuantity = quantity + change
     if (newQuantity >= 1 && newQuantity <= 10) {
       setQuantity(newQuantity)
+    }
+  }
+
+  const handleShare = async () => {
+    if (!product) return
+    
+    const url = typeof window !== 'undefined' ? window.location.href : ''
+    const text = `Check out ${product.title} on MasLim360 Store!`
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product.title,
+          text: text,
+          url: url,
+        })
+      } catch (error) {
+        // User cancelled or error occurred
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error)
+        }
+      }
+    } else {
+      // Fallback: copy to clipboard
+      try {
+        await navigator.clipboard.writeText(url)
+        alert('Link copied to clipboard!')
+      } catch (error) {
+        console.error('Error copying to clipboard:', error)
+      }
     }
   }
 
@@ -265,15 +307,17 @@ export default function ProductDetailPage() {
                   size="icon"
                   onClick={() => handleQuantityChange(-1)}
                   disabled={quantity <= 1}
+                  aria-label="Decrease quantity"
                 >
                   <Minus className="h-4 w-4" />
                 </Button>
-                <span className="w-12 text-center font-semibold">{quantity}</span>
+                <span className="w-12 text-center font-semibold" aria-label={`Quantity: ${quantity}`}>{quantity}</span>
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={() => handleQuantityChange(1)}
                   disabled={quantity >= 10}
+                  aria-label="Increase quantity"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -301,7 +345,7 @@ export default function ProductDetailPage() {
                   <Heart className={`h-4 w-4 mr-2 ${isWishlisted ? 'fill-current text-red-500' : ''}`} />
                   {isWishlisted ? 'Wishlisted' : 'Add to Wishlist'}
                 </Button>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" onClick={handleShare} aria-label="Share product">
                   <Share2 className="h-4 w-4" />
                 </Button>
               </div>

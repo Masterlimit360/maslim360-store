@@ -127,7 +127,18 @@ class ApiClient {
       throw new Error(`API request failed (${response.status}): ${message}`)
     }
 
-    return data
+    // Backend returns data directly, not wrapped in { success, data }
+    // If the response already has success/data structure, return as-is
+    // Otherwise, wrap it to match the expected ApiResponse format
+    if (data && typeof data === 'object' && 'success' in data && 'data' in data) {
+      return data as ApiResponse<T>
+    }
+    
+    // Wrap direct responses in the expected format
+    return {
+      success: true,
+      data: data as T,
+    } as ApiResponse<T>
   }
 
   // Products
@@ -233,10 +244,6 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(userData),
     })
-  }
-
-  async getProfile(): Promise<ApiResponse<any>> {
-    return this.request('/auth/me')
   }
 
   // Search

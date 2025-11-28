@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus, Package, ShoppingBag } from 'lucide-react'
 import { api } from '@/lib/api'
 import { apiClient } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
@@ -72,14 +76,18 @@ export default function SellerDashboardPage() {
       }
 
       const images = uploaded.map((url, idx) => ({ url, alt: form.title || '', isPrimary: idx === primaryIndex }))
+      
+      // Parse tags - send as array, backend will handle it
+      const tagsArray = (form.tags || '').split(',').map((t) => t.trim()).filter(Boolean)
+      
       const payload = {
         sku: form.sku || `SKU-${Date.now()}`,
         title: form.title,
         slug: form.slug || form.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `product-${Date.now()}`,
         price: Number(form.price) || 0,
         categoryId: form.categoryId,
-        tags: JSON.stringify((form.tags || '').split(',').map((t) => t.trim()).filter(Boolean)),
-        description: form.description,
+        ...(tagsArray.length > 0 && { tags: JSON.stringify(tagsArray) }),
+        ...(form.description && { description: form.description }),
         images,
       }
 
@@ -107,9 +115,34 @@ export default function SellerDashboardPage() {
 
   return (
     <div className="min-h-screen container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Seller Dashboard — Create Product</h1>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Seller Dashboard</h1>
+        <p className="text-muted-foreground">Manage your products and orders</p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="max-w-3xl">
+      <Tabs defaultValue="create" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="create">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Product
+          </TabsTrigger>
+          <TabsTrigger value="products">
+            <Package className="h-4 w-4 mr-2" />
+            My Products
+          </TabsTrigger>
+          <TabsTrigger value="orders">
+            <ShoppingBag className="h-4 w-4 mr-2" />
+            Orders
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="create" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Product</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="max-w-3xl">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Title</label>
@@ -168,11 +201,63 @@ export default function SellerDashboardPage() {
           </div>
         </div>
 
-        <div className="mt-6">
-          <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create Product'}</Button>
-          {error && <div className="text-destructive mt-3">{error}</div>}
-        </div>
-      </form>
+                <div className="mt-6">
+                  <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create Product'}</Button>
+                  {error && <div className="text-destructive mt-3">{error}</div>}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="products" className="mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>My Products</CardTitle>
+                <Link href="/seller/products">
+                  <Button variant="outline">View All Products</Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground mb-4">
+                View and manage all your products. You can delete products to make them unavailable to buyers.
+              </p>
+              <Link href="/seller/products">
+                <Button>
+                  <Package className="h-4 w-4 mr-2" />
+                  Manage Products
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="orders" className="mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Orders for My Products</CardTitle>
+                <Link href="/seller/orders">
+                  <Button variant="outline">View All Orders</Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground mb-4">
+                View orders for products you've listed. Update order status to track delivery.
+              </p>
+              <Link href="/seller/orders">
+                <Button>
+                  <ShoppingBag className="h-4 w-4 mr-2" />
+                  View Orders
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

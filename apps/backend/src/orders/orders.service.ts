@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CartService } from '../cart/cart.service';
@@ -22,6 +22,13 @@ export class OrdersService {
     
     if (!cart.items || cart.items.length === 0) {
       throw new BadRequestException('Cart is empty');
+    }
+
+    // Verify all products in cart are still active
+    for (const item of cart.items) {
+      if (!item.product.isActive) {
+        throw new BadRequestException(`Product "${item.product.title}" is no longer available. Please remove it from your cart.`);
+      }
     }
 
     // Verify addresses exist
@@ -200,10 +207,39 @@ export class OrdersService {
     return order;
   }
 
-  async updateStatus(id: string, status: string, userId?: string) {
+  async updateStatus(id: string, status: string, userId?: string, vendorId?: string) {
     const validStatuses = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
     if (!validStatuses.includes(status)) {
       throw new BadRequestException('Invalid order status');
+    }
+
+    // Check if order exists and user has permission
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Check permission: either the order owner or a seller with products in the order
+    if (userId && order.userId !== userId) {
+      // If not the order owner, check if user is a seller with products in this order
+      if (vendorId) {
+        const hasProductsInOrder = order.items.some(item => item.product.vendorId === vendorId);
+        if (!hasProductsInOrder) {
+          throw new ForbiddenException('You can only update orders for your own products');
+        }
+      } else {
+        throw new ForbiddenException('You can only update your own orders');
+      }
     }
 
     const updateData: any = { status };
@@ -214,13 +250,8 @@ export class OrdersService {
       updateData.deliveredAt = new Date();
     }
 
-    const where: any = { id };
-    if (userId) {
-      where.userId = userId;
-    }
-
     return this.prisma.order.update({
-      where,
+      where: { id },
       data: updateData,
       include: {
         items: {
@@ -251,5 +282,87 @@ export class OrdersService {
     }
 
     return this.updateStatus(id, 'CANCELLED', userId);
+  }
+
+  async getSellerOrders(userId: string, page = 1, limit = 20) {
+    // Get vendor profile for the user
+    const vendor = await this.prisma.vendorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!vendor) {
+      throw new ForbiddenException('User is not a seller');
+    }
+
+    const skip = (page - 1) * limit;
+
+    // Find all orders that contain products from this vendor
+    const [orders, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where: {
+          items: {
+            some: {
+              product: {
+                vendorId: vendor.id,
+              },
+            },
+          },
+        },
+        include: {
+          items: {
+            where: {
+              product: {
+                vendorId: vendor.id,
+              },
+            },
+            include: {
+              product: {
+                include: {
+                  images: {
+                    where: { isPrimary: true },
+                  },
+                },
+              },
+              variant: true,
+            },
+          },
+          billingAddress: true,
+          shippingAddress: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          payments: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.order.count({
+        where: {
+          items: {
+            some: {
+              product: {
+                vendorId: vendor.id,
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      orders,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
   }
 }

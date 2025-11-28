@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
@@ -63,7 +63,14 @@ const mockCoupons = [
 export default function CartPage() {
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
-  const { items, updateItem, removeItem, subtotal, itemCount } = useCart()
+  const { items, updateItem, removeItem, subtotal, itemCount, fetchCart, isLoading } = useCart()
+
+  useEffect(() => {
+    const loadCart = async () => {
+      await fetchCart()
+    }
+    loadCart()
+  }, [])
 
   const handleQuantityChange = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
@@ -138,17 +145,23 @@ export default function CartPage() {
                   <div className="flex gap-4">
                     <div className="relative w-24 h-24 flex-shrink-0">
                       <Image
-                        src={item.product.images.find(img => img.isPrimary)?.url || item.product.images[0]?.url || '/placeholder.jpg'}
-                        alt={item.product.title}
+                        src={
+                          (item.product?.images && Array.isArray(item.product.images) 
+                            ? (item.product.images.find((img: any) => img.isPrimary)?.url || item.product.images[0]?.url)
+                            : null) || '/placeholder.jpg'
+                        }
+                        alt={item.product?.title || 'Product'}
                         fill
                         className="object-cover rounded-lg"
                       />
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold mb-2 line-clamp-2">
-                        {item.product.title}
-                      </h3>
+                      <Link href={`/products/${item.product?.slug || item.product?.id}`}>
+                        <h3 className="font-semibold mb-2 line-clamp-2 hover:text-primary">
+                          {item.product?.title || 'Product'}
+                        </h3>
+                      </Link>
                       {item.variant && (
                         <p className="text-sm text-muted-foreground mb-2">
                           Variant: {item.variant.title}
@@ -160,6 +173,7 @@ export default function CartPage() {
                             variant="outline"
                             size="icon"
                             onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                            disabled={isLoading}
                           >
                             <Minus className="h-4 w-4" />
                           </Button>
@@ -168,6 +182,7 @@ export default function CartPage() {
                             variant="outline"
                             size="icon"
                             onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                            disabled={isLoading}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
@@ -175,10 +190,10 @@ export default function CartPage() {
                         
                         <div className="text-right">
                           <p className="text-lg font-semibold">
-                            {formatPrice((item.variant?.price || item.product.price) * item.quantity)}
+                            {formatPrice((item.variant?.price || item.product?.price || 0) * item.quantity)}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {formatPrice(item.variant?.price || item.product.price)} each
+                            {formatPrice(item.variant?.price || item.product?.price || 0)} each
                           </p>
                         </div>
                       </div>
@@ -255,10 +270,12 @@ export default function CartPage() {
                   )}
                 </div>
 
-                <Button size="lg" className="w-full mb-4">
-                  <CreditCard className="h-5 w-5 mr-2" />
-                  Proceed to Checkout
-                </Button>
+                <Link href="/checkout" className="w-full">
+                  <Button size="lg" className="w-full mb-4" disabled={isLoading || items.length === 0}>
+                    <CreditCard className="h-5 w-5 mr-2" />
+                    Proceed to Checkout
+                  </Button>
+                </Link>
                 
                 <Link href="/products">
                   <Button variant="outline" className="w-full">

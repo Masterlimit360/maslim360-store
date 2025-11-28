@@ -20,6 +20,14 @@ export class UsersService {
         isEmailVerified: true,
         createdAt: true,
         updatedAt: true,
+        vendorProfile: {
+          select: {
+            id: true,
+            businessName: true,
+            isVerified: true,
+            isActive: true,
+          },
+        },
       },
     });
 
@@ -27,7 +35,10 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    return {
+      ...user,
+      isSeller: !!user.vendorProfile,
+    };
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {

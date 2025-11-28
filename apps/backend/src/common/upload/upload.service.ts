@@ -4,13 +4,41 @@ import * as multer from 'multer'
 import * as path from 'path'
 import * as fs from 'fs'
 
+// Cloudinary will be imported conditionally
+let v2: any = null
+try {
+  const cloudinary = require('cloudinary')
+  v2 = cloudinary.v2
+} catch (e) {
+  // Cloudinary not installed, will use local storage
+}
+
 @Injectable()
 export class UploadService {
   private readonly uploadDir: string
+  private readonly useCloudinary: boolean
+  private cloudinaryConfigured: boolean = false
 
   constructor(private configService: ConfigService) {
     this.uploadDir = this.configService.get('UPLOAD_DIR', './uploads')
-    this.ensureUploadDirExists()
+    this.useCloudinary = this.configService.get('CLOUDINARY_CLOUD_NAME', '') !== ''
+    
+    if (this.useCloudinary && v2) {
+      this.configureCloudinary()
+    } else {
+      this.ensureUploadDirExists()
+    }
+  }
+
+  private configureCloudinary() {
+    if (this.cloudinaryConfigured || !v2) return
+    
+    v2.config({
+      cloud_name: this.configService.get('CLOUDINARY_CLOUD_NAME'),
+      api_key: this.configService.get('CLOUDINARY_API_KEY'),
+      api_secret: this.configService.get('CLOUDINARY_API_SECRET'),
+    })
+    this.cloudinaryConfigured = true
   }
 
   private ensureUploadDirExists() {
@@ -55,24 +83,67 @@ export class UploadService {
     })
   }
 
-  getFileUrl(filename: string): string {
-    return `/uploads/${filename}`
+  async uploadToCloudinary(file: Express.Multer.File): Promise<string> {
+    if (!this.useCloudinary || !v2) {
+      throw new Error('Cloudinary is not configured')
+    }
+
+    return new Promise((resolve, reject) => {
+      const uploadStream = v2.uploader.upload_stream(
+        {
+          folder: 'maslim360/products',
+          resource_type: 'auto',
+        },
+        (error: any, result: any) => {
+          if (error) {
+            reject(error)
+          } else {
+            resolve(result.secure_url)
+          }
+        }
+      )
+
+      // Convert buffer to stream
+      const stream = require('stream')
+      const bufferStream = new stream.PassThrough()
+      bufferStream.end(file.buffer)
+      bufferStream.pipe(uploadStream)
+    })
   }
 
-  deleteFile(filename: string): boolean {
+  getFileUrl(filename: string): string {
+    if (this.useCloudinary) {
+      // If using Cloudinary, filename is actually the URL
+      return filename
+    }
+    const baseUrl = this.configService.get('API_URL', 'http://localhost:4000')
+    return `${baseUrl}/uploads/${filename}`
+  }
+
+  async deleteFile(filename: string): Promise<boolean> {
     try {
-      const filePath = path.join(this.uploadDir, filename)
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath)
+      if (this.useCloudinary && v2) {
+        // Extract public_id from Cloudinary URL
+        const urlParts = filename.split('/')
+        const publicId = urlParts.slice(-2).join('/').replace(/\.[^/.]+$/, '')
+        await v2.uploader.destroy(`maslim360/products/${publicId}`)
         return true
+      } else {
+        const filePath = path.join(this.uploadDir, filename)
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath)
+          return true
+        }
+        return false
       }
-      return false
     } catch (error) {
       console.error('Error deleting file:', error)
       return false
     }
   }
 }
+
+
 
 
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,8 +12,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
 import { Eye, EyeOff, Mail, Lock, ArrowLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function LoginPage() {
+  const router = useRouter()
+  const { login, isLoading } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
@@ -20,20 +24,31 @@ export default function LoginPage() {
     rememberMe: false,
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle login logic here
-    toast.success('Login successful!')
+    
+    if (!formData.email || !formData.password) {
+      toast.error('Please fill in all fields')
+      return
+    }
+
+    try {
+      await login(formData.email, formData.password)
+      toast.success('Login successful!')
+      router.push('/')
+    } catch (err: any) {
+      toast.error(err?.message || 'Login failed. Please check your credentials.')
+    }
   }
 
   const handleGoogleLogin = () => {
-    // Handle Google OAuth
-    toast.success('Google login initiated!')
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+    window.location.href = `${API_URL}/auth/google`
   }
 
   const handleFacebookLogin = () => {
-    // Handle Facebook OAuth
-    toast.success('Facebook login initiated!')
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+    window.location.href = `${API_URL}/auth/facebook`
   }
 
   return (
@@ -150,8 +165,8 @@ export default function LoginPage() {
                   </Link>
                 </div>
 
-                <Button type="submit" className="w-full" size="lg">
-                  Sign In
+                <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                  {isLoading ? 'Signing in...' : 'Sign In'}
                 </Button>
               </form>
 
