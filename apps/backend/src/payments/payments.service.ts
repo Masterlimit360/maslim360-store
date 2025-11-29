@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class PaymentsService {
@@ -10,6 +12,7 @@ export class PaymentsService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private httpService: HttpService,
   ) {
     const stripeKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (stripeKey) {
@@ -46,7 +49,7 @@ export class PaymentsService {
       throw new BadRequestException('Invalid payment amount');
     }
 
-    // Handle Paystack payments (simulated gateway integration)
+    // Handle Paystack payments
     if (paymentMethod === 'paystack') {
       const paystackSecret = this.configService.get<string>('PAYSTACK_SECRET_KEY');
 
@@ -54,47 +57,72 @@ export class PaymentsService {
         throw new BadRequestException('Paystack is not configured');
       }
 
-      const paystackReference = `PAYSTACK-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 8)}`;
+      try {
+        // Get frontend URL from config
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+        
+        // Fetch user email from order
+        const user = await this.prisma.user.findUnique({ where: { id: order.userId } });
+        const customerEmail = user?.email || 'customer@example.com';
+        
+        // Call Paystack API to initialize transaction
+        const paystackResponse = await firstValueFrom(
+          this.httpService.post<any>(
+            'https://api.paystack.co/transaction/initialize',
+            {
+              email: customerEmail,
+              amount: Math.round(paymentAmount * 100), // Paystack expects amount in cents
+              reference: `ORD-${order.id}-${Date.now()}`,
+              callback_url: `${frontendUrl}/paystack-return`,
+              metadata: {
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+              },
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${paystackSecret}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          )
+        );
 
-      // Create payment record
-      const payment = await this.prisma.payment.create({
-        data: {
-          orderId: order.id,
-          amount: paymentAmount,
-          currency: currency.toUpperCase(),
-          status: 'PENDING',
-          paymentMethod: 'paystack',
-          transactionId: paystackReference,
-          gatewayResponse: JSON.stringify({
-            reference: paystackReference,
-          }),
-        },
-      });
+        const { data, message, status } = paystackResponse.data;
 
-      // For now, immediately mark payment and order as completed/processing.
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: 'COMPLETED',
-        },
-      });
+        if (!status || !data?.authorization_url) {
+          throw new BadRequestException('Failed to initialize Paystack transaction');
+        }
 
-      await this.prisma.order.update({
-        where: { id: order.id },
-        data: { status: 'PROCESSING' },
-      });
+        // Create payment record in DB
+        const payment = await this.prisma.payment.create({
+          data: {
+            orderId: order.id,
+            amount: paymentAmount,
+            currency: currency.toUpperCase(),
+            status: 'PENDING',
+            paymentMethod: 'paystack',
+            transactionId: data.reference,
+            gatewayResponse: JSON.stringify({
+              reference: data.reference,
+              authorization_url: data.authorization_url,
+              access_code: data.access_code,
+            }),
+          },
+        });
 
-      const updatedPayment = await this.prisma.payment.findUnique({
-        where: { id: payment.id },
-      });
-
-      return {
-        payment: updatedPayment,
-        paymentIntentId: paystackReference,
-        message: 'Paystack payment processed successfully.',
-      };
+        return {
+          payment,
+          paymentIntentId: data.reference,
+          authorizationUrl: data.authorization_url, // Frontend redirects user here
+          message: 'Redirect to Paystack to complete payment',
+        };
+      } catch (error: any) {
+        console.error('Paystack initialization error:', error.response?.data || error.message);
+        throw new BadRequestException(
+          error.response?.data?.message || 'Failed to initialize Paystack payment'
+        );
+      }
     }
 
     if (paymentMethod === 'mtn_momo') {
@@ -182,7 +210,61 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    // Verify with Stripe if configured
+    // Verify Paystack payment
+    if (payment.paymentMethod === 'paystack') {
+      const paystackSecret = this.configService.get<string>('PAYSTACK_SECRET_KEY');
+      if (!paystackSecret) {
+        throw new BadRequestException('Paystack is not configured');
+      }
+
+      try {
+        const verifyResponse = await firstValueFrom(
+          this.httpService.get<any>(
+            `https://api.paystack.co/transaction/verify/${transactionId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${paystackSecret}`,
+              },
+            }
+          )
+        );
+
+        const { data, status } = verifyResponse.data;
+
+        if (!status || data?.status !== 'success') {
+          throw new BadRequestException('Payment verification failed');
+        }
+
+        // Update payment to COMPLETED
+        await this.prisma.payment.update({
+          where: { id: paymentId },
+          data: {
+            status: 'COMPLETED',
+            gatewayResponse: JSON.stringify(data),
+          },
+        });
+
+        // Update order status to PROCESSING
+        await this.prisma.order.update({
+          where: { id: payment.orderId },
+          data: { status: 'PROCESSING' },
+        });
+
+        return {
+          success: true,
+          payment: await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+          }),
+        };
+      } catch (error: any) {
+        console.error('Paystack verification error:', error.response?.data || error.message);
+        throw new BadRequestException(
+          error.response?.data?.message || 'Payment verification failed'
+        );
+      }
+    }
+
+    // Verify MTN MoMo payment
     if (payment.paymentMethod === 'mtn_momo') {
       await this.prisma.payment.update({
         where: { id: paymentId },

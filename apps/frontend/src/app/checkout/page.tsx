@@ -228,10 +228,16 @@ export default function CheckoutPage() {
         })
 
         if (!paystackPayment.success) {
-          throw new Error(paystackPayment.message || 'Failed to process Paystack payment')
+          throw new Error(paystackPayment.message || 'Failed to initialize Paystack payment')
         }
 
-        toast.success('Paystack payment processed successfully.')
+        // Redirect to Paystack authorization URL
+        if (paystackPayment.data?.authorizationUrl) {
+          window.location.href = paystackPayment.data.authorizationUrl
+          return
+        } else {
+          throw new Error('No authorization URL from Paystack')
+        }
       }
 
       // Step 5: Clear cart and redirect
