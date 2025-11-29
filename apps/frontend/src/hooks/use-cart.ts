@@ -124,7 +124,7 @@ const createCartStore = (set: any, get: any) => ({
           if (!response.ok) {
             let errorMessage = 'Failed to add item to cart'
             try {
-              const errorData = await response.json()
+            const errorData = await response.json()
               // Handle NestJS validation errors (array format)
               if (Array.isArray(errorData.message)) {
                 errorMessage = errorData.message.join(', ') || errorMessage
@@ -181,7 +181,7 @@ const createCartStore = (set: any, get: any) => ({
           if (!response.ok) {
             let errorMessage = 'Failed to update cart item'
             try {
-              const errorData = await response.json()
+            const errorData = await response.json()
               errorMessage = errorData.message || errorData.error || errorMessage
             } catch {
               try {
@@ -220,7 +220,7 @@ const createCartStore = (set: any, get: any) => ({
           if (!response.ok) {
             let errorMessage = 'Failed to remove cart item'
             try {
-              const errorData = await response.json()
+            const errorData = await response.json()
               errorMessage = errorData.message || errorData.error || errorMessage
             } catch {
               try {
@@ -259,7 +259,7 @@ const createCartStore = (set: any, get: any) => ({
           if (!response.ok) {
             let errorMessage = 'Failed to clear cart'
             try {
-              const errorData = await response.json()
+            const errorData = await response.json()
               errorMessage = errorData.message || errorData.error || errorMessage
             } catch {
               try {

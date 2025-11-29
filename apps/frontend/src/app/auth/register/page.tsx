@@ -38,7 +38,7 @@ export default function RegisterPage() {
       toast.error('Please fill in all required fields')
       return
     }
-
+    
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match')
       return
@@ -53,7 +53,7 @@ export default function RegisterPage() {
       toast.error('Please agree to the terms and conditions')
       return
     }
-
+    
     if (formData.isSeller && !formData.businessName?.trim()) {
       toast.error('Please provide a business name for seller accounts')
       return
@@ -63,42 +63,42 @@ export default function RegisterPage() {
     try {
       // Call API directly to support seller registration
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
-      const body = {
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
+        const body = {
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
         ...(formData.isSeller && {
           isSeller: true,
           businessName: formData.businessName,
         }),
-      }
+        }
 
       const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
 
       const data = await response.json()
       if (!response.ok) throw new Error(data.message || 'Registration failed')
 
       // Update auth state
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('token', data.token)
-      }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('token', data.token)
+        }
       
       // Update the auth store
       setUser(data.user)
       setToken(data.token)
 
-      toast.success('Account created successfully!')
+        toast.success('Account created successfully!')
       router.push('/')
-    } catch (err: any) {
-      toast.error(err?.message || 'Registration failed')
+      } catch (err: any) {
+        toast.error(err?.message || 'Registration failed')
     } finally {
       setIsSubmitting(false)
-    }
+      }
   }
 
   const handleGoogleLogin = () => {

@@ -69,3 +69,4 @@ export class OrdersController {
   ) {
     return this.ordersService.getSellerOrders(req.user.id, +page, +limit);
   }
+}

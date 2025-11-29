@@ -13,8 +13,23 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create payment intent' })
   @ApiResponse({ status: 201, description: 'Payment intent created successfully' })
-  async createPaymentIntent(@Body() body: { orderId: string; amount: number; currency?: string }) {
-    return this.paymentsService.createPaymentIntent(body.orderId, body.amount, body.currency);
+  async createPaymentIntent(
+    @Body()
+    body: {
+      orderId: string;
+      amount?: number;
+      currency?: string;
+      paymentMethod?: 'stripe' | 'mtn_momo' | 'paystack';
+      payerNumber?: string;
+    },
+  ) {
+    return this.paymentsService.createPaymentIntent(
+      body.orderId,
+      body.amount,
+      body.currency,
+      body.paymentMethod,
+      { payerNumber: body.payerNumber },
+    );
   }
 
   @Post('confirm')

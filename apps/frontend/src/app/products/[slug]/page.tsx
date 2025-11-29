@@ -97,7 +97,7 @@ export default function ProductDetailPage() {
     if (!product) return
     
     try {
-      await addItem(product.id, selectedVariant, quantity)
+    await addItem(product.id, selectedVariant, quantity)
       // Success toast is handled in the cart hook
     } catch (error: any) {
       // Error toast is handled in the cart hook

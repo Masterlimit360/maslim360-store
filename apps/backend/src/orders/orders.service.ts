@@ -10,6 +10,25 @@ export class OrdersService {
     private cartService: CartService,
   ) {}
 
+  private attachStreetField(address: any) {
+    if (!address) return address;
+    if (address.street) return address;
+    return {
+      ...address,
+      street: address.address1,
+    };
+  }
+
+  private mapOrderAddresses(order: any) {
+    if (!order) return order;
+    return {
+      ...order,
+      shippingAddress: this.attachStreetField(order.shippingAddress),
+      billingAddress: this.attachStreetField(order.billingAddress),
+      total: order.totalAmount ?? order.total ?? 0,
+    };
+  }
+
   async generateOrderNumber(): Promise<string> {
     const count = await this.prisma.order.count();
     const timestamp = Date.now().toString(36).toUpperCase();
@@ -136,7 +155,7 @@ export class OrdersService {
     // Clear cart after order creation
     await this.cartService.clearCart(userId);
 
-    return order;
+    return this.mapOrderAddresses(order);
   }
 
   async findAll(userId: string, page = 1, limit = 10) {
@@ -170,7 +189,7 @@ export class OrdersService {
     ]);
 
     return {
-      orders,
+      orders: orders.map(order => this.mapOrderAddresses(order)),
       pagination: {
         page,
         limit,
@@ -204,7 +223,7 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    return order;
+    return this.mapOrderAddresses(order);
   }
 
   async updateStatus(id: string, status: string, userId?: string, vendorId?: string) {
@@ -356,7 +375,7 @@ export class OrdersService {
     ]);
 
     return {
-      orders,
+      orders: orders.map(order => this.mapOrderAddresses(order)),
       pagination: {
         page,
         limit,

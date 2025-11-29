@@ -1,10 +1,17 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsBoolean, IsEnum } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateAddressDto {
-  @ApiProperty({ example: 'billing', enum: ['billing', 'shipping'] })
+  @ApiPropertyOptional({
+    example: 'shipping',
+    enum: ['billing', 'shipping'],
+    description: 'Defaults to shipping when not provided',
+  })
   @IsEnum(['billing', 'shipping'])
-  type: 'billing' | 'shipping';
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  type?: 'billing' | 'shipping';
 
   @ApiProperty({ example: 'John' })
   @IsString()
@@ -19,9 +26,20 @@ export class CreateAddressDto {
   @IsOptional()
   company?: string;
 
-  @ApiProperty({ example: '123 Main St' })
+  @ApiPropertyOptional({ example: '123 Main St' })
   @IsString()
-  address1: string;
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  address1?: string;
+
+  @ApiPropertyOptional({
+    example: '123 Main St',
+    description: 'Alias for address1 for frontend compatibility',
+  })
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  street?: string;
 
   @ApiProperty({ example: 'Apt 4B', required: false })
   @IsString()

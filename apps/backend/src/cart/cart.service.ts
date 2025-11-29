@@ -70,15 +70,24 @@ export class CartService {
     }
 
     // Check if item already exists in cart
-    const existingItem = await this.prisma.cartItem.findUnique({
-      where: {
-        userId_productId_variantId: {
-          userId,
-          productId,
-          variantId: variantId || null,
-        },
-      },
-    });
+    // Use findFirst when variantId is null since Prisma can't use findUnique with null in composite keys
+    const existingItem = variantId
+      ? await this.prisma.cartItem.findUnique({
+          where: {
+            userId_productId_variantId: {
+              userId,
+              productId,
+              variantId,
+            },
+          },
+        })
+      : await this.prisma.cartItem.findFirst({
+          where: {
+            userId,
+            productId,
+            variantId: null,
+          },
+        });
 
     if (existingItem) {
       // Update quantity

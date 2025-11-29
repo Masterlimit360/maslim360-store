@@ -199,14 +199,17 @@ export default function CheckoutPage() {
 
       const order = orderResponse.data
 
+      const orderTotal = order?.total ?? order?.totalAmount ?? total
+
       // Step 4: Handle payment
       if (formData.paymentMethod === 'card') {
         // Create payment intent
-        const paymentIntent = await apiClient.createPaymentIntent(
-          order.id,
-          order.total,
-          'usd'
-        )
+        const paymentIntent = await apiClient.createPaymentIntent({
+          orderId: order.id,
+          amount: orderTotal,
+          currency: 'usd',
+          paymentMethod: 'stripe',
+        })
 
         if (paymentIntent.success) {
           // For demo purposes, we'll confirm payment immediately
@@ -216,6 +219,19 @@ export default function CheckoutPage() {
             paymentIntent.data.transactionId || 'demo-txn'
           )
         }
+      } else if (formData.paymentMethod === 'paystack') {
+        const paystackPayment = await apiClient.createPaymentIntent({
+          orderId: order.id,
+          amount: orderTotal,
+          currency: 'usd',
+          paymentMethod: 'paystack',
+        })
+
+        if (!paystackPayment.success) {
+          throw new Error(paystackPayment.message || 'Failed to process Paystack payment')
+        }
+
+        toast.success('Paystack payment processed successfully.')
       }
 
       // Step 5: Clear cart and redirect
@@ -413,6 +429,13 @@ export default function CheckoutPage() {
                             </Label>
                           </div>
                           <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="paystack" id="paystack" />
+                            <Label htmlFor="paystack" className="flex items-center">
+                              <Shield className="h-4 w-4 mr-2" />
+                              Paystack
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
                             <RadioGroupItem value="paypal" id="paypal" />
                             <Label htmlFor="paypal">PayPal</Label>
                           </div>
@@ -421,6 +444,11 @@ export default function CheckoutPage() {
                             <Label htmlFor="bank">Bank Transfer</Label>
                           </div>
                         </RadioGroup>
+                        {formData.paymentMethod === 'paystack' && (
+                          <p className="text-sm text-muted-foreground">
+                            We&apos;ll process your payment securely via Paystack.
+                          </p>
+                        )}
                       </div>
 
                       {formData.paymentMethod === 'card' && (

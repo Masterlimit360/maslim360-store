@@ -17,7 +17,13 @@ export class PaymentsService {
     }
   }
 
-  async createPaymentIntent(orderId: string, amount: number, currency = 'usd') {
+  async createPaymentIntent(
+    orderId: string,
+    amount?: number,
+    currency = 'usd',
+    paymentMethod: 'stripe' | 'mtn_momo' | 'paystack' = 'stripe',
+    metadata?: { payerNumber?: string },
+  ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -30,6 +36,100 @@ export class PaymentsService {
       throw new BadRequestException('Order is not pending');
     }
 
+    const paymentAmount =
+      amount ??
+      order.totalAmount ??
+      (order as any).total ??
+      0;
+
+    if (!paymentAmount || paymentAmount <= 0) {
+      throw new BadRequestException('Invalid payment amount');
+    }
+
+    // Handle Paystack payments (simulated gateway integration)
+    if (paymentMethod === 'paystack') {
+      const paystackSecret = this.configService.get<string>('PAYSTACK_SECRET_KEY');
+
+      if (!paystackSecret) {
+        throw new BadRequestException('Paystack is not configured');
+      }
+
+      const paystackReference = `PAYSTACK-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+
+      // Create payment record
+      const payment = await this.prisma.payment.create({
+        data: {
+          orderId: order.id,
+          amount: paymentAmount,
+          currency: currency.toUpperCase(),
+          status: 'PENDING',
+          paymentMethod: 'paystack',
+          transactionId: paystackReference,
+          gatewayResponse: JSON.stringify({
+            reference: paystackReference,
+          }),
+        },
+      });
+
+      // For now, immediately mark payment and order as completed/processing.
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'COMPLETED',
+        },
+      });
+
+      await this.prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'PROCESSING' },
+      });
+
+      const updatedPayment = await this.prisma.payment.findUnique({
+        where: { id: payment.id },
+      });
+
+      return {
+        payment: updatedPayment,
+        paymentIntentId: paystackReference,
+        message: 'Paystack payment processed successfully.',
+      };
+    }
+
+    if (paymentMethod === 'mtn_momo') {
+      const consumerKey = this.configService.get<string>('MTN_MOMO_CONSUMER_KEY');
+      const consumerSecret = this.configService.get<string>('MTN_MOMO_CONSUMER_SECRET');
+
+      if (!consumerKey || !consumerSecret) {
+        throw new BadRequestException('MTN MoMo is not configured');
+      }
+
+      const momoReference = `MOMO-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      const payerNumber = metadata?.payerNumber;
+
+      const payment = await this.prisma.payment.create({
+        data: {
+          orderId: order.id,
+          amount: paymentAmount,
+          currency: currency.toUpperCase(),
+          status: 'PENDING',
+          paymentMethod: 'mtn_momo',
+          transactionId: momoReference,
+          gatewayResponse: JSON.stringify({
+            reference: momoReference,
+            payerNumber,
+          }),
+        },
+      });
+
+      return {
+        payment,
+        paymentIntentId: momoReference,
+        message: 'MTN MoMo payment initiated. Please approve the transaction in your MoMo app.',
+      };
+    }
+
     // Create Stripe payment intent if Stripe is configured
     let paymentIntentId: string | null = null;
     let clientSecret: string | null = null;
@@ -37,7 +137,7 @@ export class PaymentsService {
     if (this.stripe) {
       try {
         const intent = await this.stripe.paymentIntents.create({
-          amount: Math.round(amount * 100), // Convert to cents
+          amount: Math.round(paymentAmount * 100), // Convert to cents
           currency: currency.toLowerCase(),
           metadata: {
             orderId: order.id,
@@ -57,7 +157,7 @@ export class PaymentsService {
     const payment = await this.prisma.payment.create({
       data: {
         orderId: order.id,
-        amount,
+        amount: paymentAmount,
         currency: currency.toUpperCase(),
         status: 'PENDING',
         paymentMethod: 'stripe',
@@ -83,6 +183,28 @@ export class PaymentsService {
     }
 
     // Verify with Stripe if configured
+    if (payment.paymentMethod === 'mtn_momo') {
+      await this.prisma.payment.update({
+        where: { id: paymentId },
+        data: {
+          status: 'COMPLETED',
+          transactionId,
+        },
+      });
+
+      await this.prisma.order.update({
+        where: { id: payment.orderId },
+        data: { status: 'PROCESSING' },
+      });
+
+      return {
+        success: true,
+        payment: await this.prisma.payment.findUnique({
+          where: { id: paymentId },
+        }),
+      };
+    }
+
     if (this.stripe && transactionId) {
       try {
         const intent = await this.stripe.paymentIntents.retrieve(transactionId);

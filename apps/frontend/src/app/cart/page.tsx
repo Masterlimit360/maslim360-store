@@ -160,7 +160,7 @@ export default function CartPage() {
                       <Link href={`/products/${item.product?.slug || item.product?.id}`}>
                         <h3 className="font-semibold mb-2 line-clamp-2 hover:text-primary">
                           {item.product?.title || 'Product'}
-                        </h3>
+                      </h3>
                       </Link>
                       {item.variant && (
                         <p className="text-sm text-muted-foreground mb-2">

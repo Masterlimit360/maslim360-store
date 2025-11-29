@@ -142,7 +142,7 @@ export default function SellerDashboardPage() {
               <CardTitle>Create New Product</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="max-w-3xl">
+      <form onSubmit={handleSubmit} className="max-w-3xl">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Title</label>
@@ -201,11 +201,11 @@ export default function SellerDashboardPage() {
           </div>
         </div>
 
-                <div className="mt-6">
-                  <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create Product'}</Button>
-                  {error && <div className="text-destructive mt-3">{error}</div>}
-                </div>
-              </form>
+        <div className="mt-6">
+          <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create Product'}</Button>
+          {error && <div className="text-destructive mt-3">{error}</div>}
+        </div>
+      </form>
             </CardContent>
           </Card>
         </TabsContent>

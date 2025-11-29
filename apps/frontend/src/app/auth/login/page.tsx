@@ -34,7 +34,7 @@ export default function LoginPage() {
 
     try {
       await login(formData.email, formData.password)
-      toast.success('Login successful!')
+    toast.success('Login successful!')
       router.push('/')
     } catch (err: any) {
       toast.error(err?.message || 'Login failed. Please check your credentials.')

@@ -313,10 +313,16 @@ class ApiClient {
   }
 
   // Payments
-  async createPaymentIntent(orderId: string, amount: number, currency = 'usd'): Promise<ApiResponse<any>> {
+  async createPaymentIntent(data: {
+    orderId: string
+    amount?: number
+    currency?: string
+    paymentMethod?: 'stripe' | 'mtn_momo' | 'paystack'
+    payerNumber?: string
+  }): Promise<ApiResponse<any>> {
     return this.request('/payments/intents', {
       method: 'POST',
-      body: JSON.stringify({ orderId, amount, currency }),
+      body: JSON.stringify(data),
     })
   }
 

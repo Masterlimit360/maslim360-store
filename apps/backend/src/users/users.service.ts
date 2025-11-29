@@ -6,6 +6,39 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
+  private normalizeAddressData(addressData: any) {
+    const { street, address1, type, ...rest } = addressData;
+    const normalizedAddress1 = (address1 ?? street)?.toString().trim();
+
+    if (!normalizedAddress1) {
+      throw new BadRequestException('Street address is required');
+    }
+
+    return {
+      ...rest,
+      address1: normalizedAddress1,
+      type: type || 'shipping',
+    };
+  }
+
+  private attachStreetField(address: any) {
+    if (!address) return address;
+    if (address.street) return address;
+    return {
+      ...address,
+      street: address.address1,
+    };
+  }
+
+  private mapOrderAddresses(order: any) {
+    if (!order) return order;
+    return {
+      ...order,
+      shippingAddress: this.attachStreetField(order.shippingAddress),
+      billingAddress: this.attachStreetField(order.billingAddress),
+    };
+  }
+
   async findById(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -104,7 +137,7 @@ export class UsersService {
     ]);
 
     return {
-      orders,
+      orders: orders.map(order => this.mapOrderAddresses(order)),
       pagination: {
         page,
         limit,
@@ -115,28 +148,34 @@ export class UsersService {
   }
 
   async getUserAddresses(userId: string) {
-    return this.prisma.address.findMany({
+    const addresses = await this.prisma.address.findMany({
       where: { userId },
       orderBy: [
         { isDefault: 'desc' },
         { createdAt: 'desc' },
       ],
     });
+
+    return addresses.map(address => this.attachStreetField(address));
   }
 
   async createAddress(userId: string, addressData: any) {
-    return this.prisma.address.create({
+    const normalizedData = this.normalizeAddressData(addressData);
+    const address = await this.prisma.address.create({
       data: {
-        ...addressData,
+        ...normalizedData,
         userId,
       },
     });
+
+    return this.attachStreetField(address);
   }
 
   async updateAddress(id: string, userId: string, addressData: any) {
+    const normalizedData = this.normalizeAddressData(addressData);
     return this.prisma.address.updateMany({
       where: { id, userId },
-      data: addressData,
+      data: normalizedData,
     });
   }
 
