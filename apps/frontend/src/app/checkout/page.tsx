@@ -39,6 +39,8 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState<any[]>([])
   const [selectedShippingAddress, setSelectedShippingAddress] = useState<string | null>(null)
   const [selectedBillingAddress, setSelectedBillingAddress] = useState<string | null>(null)
+  const [availableChannels, setAvailableChannels] = useState<any[]>([])
+  const [channelsLoading, setChannelsLoading] = useState(true)
   const [formData, setFormData] = useState({
     // Shipping Information
     firstName: '',
@@ -86,6 +88,28 @@ export default function CheckoutPage() {
       return
     }
 
+    const fetchPaymentChannels = async () => {
+      try {
+        setChannelsLoading(true)
+        const response = await apiClient.getPaymentChannels()
+        if (response.success && response.data?.channels) {
+          setAvailableChannels(response.data.channels)
+          // Set default payment method to first available channel
+          if (response.data.channels.length > 0 && !formData.paymentMethod) {
+            setFormData(prev => ({ ...prev, paymentMethod: response.data.channels[0].id }))
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching payment channels:', error)
+        // Fallback to default channels if API fails
+        setAvailableChannels([
+          { id: 'card', name: 'card', displayName: 'Credit/Debit Card', isAvailable: true, description: 'Visa, Mastercard' }
+        ])
+      } finally {
+        setChannelsLoading(false)
+      }
+    }
+
     const fetchAddresses = async () => {
       try {
         const response = await apiClient.getAddresses()
@@ -113,6 +137,7 @@ export default function CheckoutPage() {
       }
     }
 
+    fetchPaymentChannels()
     fetchAddresses()
   }, [isAuthenticated, router])
 
@@ -184,6 +209,17 @@ export default function CheckoutPage() {
       const shippingAmount = subtotal > 50 ? 0 : 9.99
       const taxAmount = subtotal * 0.08
 
+      // Validate payment method before creating order
+      if (
+        formData.paymentMethod !== 'card' &&
+        formData.paymentMethod !== 'paystack' &&
+        formData.paymentMethod !== 'paystack_mobile'
+      ) {
+        throw new Error(
+          'Selected payment method is not supported yet. Please choose Credit/Debit Card or Paystack.'
+        );
+      }
+
       // Step 3: Create order
       const orderResponse = await apiClient.createOrder({
         billingAddressId: billingAddressId!,
@@ -203,12 +239,11 @@ export default function CheckoutPage() {
 
       // Step 4: Handle payment
       if (formData.paymentMethod === 'card') {
-        // Create payment intent
+        // Create payment intent (use Ghana cedis)
         const paymentIntent = await apiClient.createPaymentIntent({
           orderId: order.id,
           amount: orderTotal,
-          currency: 'usd',
-          paymentMethod: 'stripe',
+          currency: 'ghs',
         })
 
         if (paymentIntent.success) {
@@ -219,24 +254,64 @@ export default function CheckoutPage() {
             paymentIntent.data.transactionId || 'demo-txn'
           )
         }
-      } else if (formData.paymentMethod === 'paystack') {
-        const paystackPayment = await apiClient.createPaymentIntent({
-          orderId: order.id,
-          amount: orderTotal,
-          currency: 'usd',
-          paymentMethod: 'paystack',
-        })
+      } else if (
+        formData.paymentMethod === 'paystack' ||
+        formData.paymentMethod === 'paystack_mobile'
+      ) {
+        try {
+          const paystackPayment = await apiClient.createPaymentIntent({
+            orderId: order.id,
+            amount: orderTotal,
+            currency: 'ghs',
+            paymentMethod: formData.paymentMethod,
+            payerNumber: formData.phone,
+          });
 
-        if (!paystackPayment.success) {
-          throw new Error(paystackPayment.message || 'Failed to initialize Paystack payment')
-        }
+          if (!paystackPayment.success) {
+            // Check if error is about inactive channels
+            if (
+              paystackPayment.message?.includes('No active channel') ||
+              paystackPayment.message?.includes('channel') ||
+              paystackPayment.message?.includes('configured')
+            ) {
+              throw new Error(
+                'The selected payment method is not currently available. Please contact support or try another payment method.'
+              );
+            }
+            throw new Error(paystackPayment.message || 'Failed to initialize Paystack payment');
+          }
 
-        // Redirect to Paystack authorization URL
-        if (paystackPayment.data?.authorizationUrl) {
-          window.location.href = paystackPayment.data.authorizationUrl
+          // Redirect to Paystack authorization URL
+          if (paystackPayment.data?.authorizationUrl) {
+            // Store order ID in session storage for reference on return
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('paystack_order_id', order.id)
+              sessionStorage.setItem('paystack_reference', paystackPayment.data?.paymentIntentId)
+            }
+            window.location.href = paystackPayment.data.authorizationUrl
+            return
+          } else {
+            throw new Error('No authorization URL from Paystack. Please try again.')
+          }
+        } catch (paymentError: any) {
+          // Add more helpful error context
+          const errorMessage = paymentError.message || 'Payment initialization failed'
+          if (errorMessage.includes('No active channel')) {
+            setError(
+              'Payment method unavailable: ' +
+              (formData.paymentMethod === 'paystack_mobile'
+                ? 'Mobile money is not currently available. Please use card or bank payment.'
+                : 'This payment method is not available. Please contact support.'
+              )
+            )
+          } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+            setError('Network error. Please check your connection and try again.')
+          } else {
+            setError(errorMessage)
+          }
+          setLoading(false)
+          toast.error(errorMessage)
           return
-        } else {
-          throw new Error('No authorization URL from Paystack')
         }
       }
 
@@ -421,41 +496,51 @@ export default function CheckoutPage() {
                     <div className="space-y-6">
                       <h2 className="text-xl font-semibold">Payment Information</h2>
                       
-                      <div className="space-y-4">
-                        <Label>Payment Method *</Label>
-                        <RadioGroup
-                          value={formData.paymentMethod}
-                          onValueChange={(value) => handleInputChange('paymentMethod', value)}
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="card" id="card" />
-                            <Label htmlFor="card" className="flex items-center">
-                              <CreditCard className="h-4 w-4 mr-2" />
-                              Credit/Debit Card
-                            </Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="paystack" id="paystack" />
-                            <Label htmlFor="paystack" className="flex items-center">
-                              <Shield className="h-4 w-4 mr-2" />
-                              Paystack
-                            </Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="paypal" id="paypal" />
-                            <Label htmlFor="paypal">PayPal</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="bank" id="bank" />
-                            <Label htmlFor="bank">Bank Transfer</Label>
-                          </div>
-                        </RadioGroup>
-                        {formData.paymentMethod === 'paystack' && (
-                          <p className="text-sm text-muted-foreground">
-                            We&apos;ll process your payment securely via Paystack.
+                      {channelsLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          <span className="ml-2">Loading payment methods...</span>
+                        </div>
+                      ) : availableChannels.length === 0 ? (
+                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <AlertCircle className="h-5 w-5 text-yellow-600 inline mr-2" />
+                          <p className="text-yellow-800">
+                            No payment methods are currently configured. Please contact support.
                           </p>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <Label>Payment Method *</Label>
+                          <RadioGroup
+                            value={formData.paymentMethod}
+                            onValueChange={(value) => handleInputChange('paymentMethod', value)}
+                          >
+                            {availableChannels.map(channel => (
+                              <div key={channel.id} className="flex items-start space-x-2 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer">
+                                <RadioGroupItem value={channel.id} id={channel.id} />
+                                <div className="flex-1">
+                                  <Label htmlFor={channel.id} className="flex items-center cursor-pointer font-medium">
+                                    {channel.id === 'card' && <CreditCard className="h-4 w-4 mr-2" />}
+                                    {channel.id.includes('paystack') && <Shield className="h-4 w-4 mr-2" />}
+                                    {channel.displayName}
+                                  </Label>
+                                  {channel.description && (
+                                    <p className="text-xs text-muted-foreground mt-1">{channel.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </RadioGroup>
+                        </div>
+                      )}
+
+                      {(formData.paymentMethod === 'paystack' || formData.paymentMethod === 'paystack_mobile') && (
+                        <p className="text-sm text-muted-foreground">
+                          We&apos;ll process your payment securely via Paystack.
+                          {formData.paymentMethod === 'paystack_mobile' &&
+                            ' You will be prompted to complete a Ghana mobile money transaction.'}
+                        </p>
+                      )}
 
                       {formData.paymentMethod === 'card' && (
                         <div className="space-y-4">

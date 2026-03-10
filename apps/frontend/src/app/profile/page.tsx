@@ -50,9 +50,14 @@ export default function ProfilePage() {
     phone: '',
     isDefault: false,
   })
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, logout } = useAuth()
   const { addItem } = useCart()
   const router = useRouter()
+
+  const handleLogout = () => {
+    logout()
+    router.push('/auth/login')
+  }
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -238,6 +243,10 @@ export default function ProfilePage() {
                   <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
                     <Edit className="h-4 w-4 mr-2" />
                     {isEditing ? 'Cancel' : 'Edit Profile'}
+                  </Button>
+                  <Button variant="destructive" onClick={handleLogout}>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
                   </Button>
                 </div>
               </div>

@@ -29,6 +29,12 @@ export default function SearchPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '')
+
+  // Sync state when URL query changes (e.g. header search while already on page)
+  useEffect(() => {
+    const q = searchParams.get('q') || ''
+    setSearchQuery(q)
+  }, [searchParams])
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
@@ -348,106 +354,6 @@ export default function SearchPage() {
                 <p className="text-muted-foreground">
                   Enter a search term to find products
                 </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-                {filteredResults.map((product) => (
-                  <Card key={product.id} className="group hover:shadow-lg transition-shadow">
-                    <CardContent className="p-0">
-                      <div className="relative overflow-hidden">
-                        <img
-                          src={product.image}
-                          alt={product.title}
-                          className={`w-full object-cover group-hover:scale-105 transition-transform duration-300 ${
-                            viewMode === 'grid' ? 'h-48' : 'h-32 w-32'
-                          }`}
-                        />
-                        {product.isNew && (
-                          <Badge className="absolute top-2 left-2 bg-green-500">
-                            New
-                          </Badge>
-                        )}
-                        {!product.inStock && (
-                          <Badge className="absolute top-2 right-2 bg-red-500">
-                            Out of Stock
-                          </Badge>
-                        )}
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button size="icon" variant="secondary" className="h-8 w-8">
-                            <Heart className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors line-clamp-2">
-                              {product.title}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">{product.category}</p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center mb-3">
-                          <div className="flex items-center">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`h-4 w-4 ${
-                                  i < Math.floor(product.rating)
-                                    ? 'text-yellow-400 fill-current'
-                                    : 'text-gray-300'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          <span className="text-sm text-muted-foreground ml-2">
-                            ({product.reviewCount})
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-lg font-bold">
-                              {formatPrice(product.price)}
-                            </span>
-                            {product.comparePrice && (
-                              <span className="text-sm text-muted-foreground line-through">
-                                {formatPrice(product.comparePrice)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <Button 
-                          className="w-full" 
-                          onClick={() => handleAddToCart(product)}
-                          disabled={!product.inStock}
-                        >
-                          <ShoppingCart className="h-4 w-4 mr-2" />
-                          {product.inStock ? 'Add to Cart' : 'Out of Stock'}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">No products found</h3>
-                <p className="text-muted-foreground mb-4">
-                  Try adjusting your search or filter criteria
-                </p>
-                <Button onClick={clearFilters}>
-                  Clear Filters
-                </Button>
               </div>
             )}
           </div>

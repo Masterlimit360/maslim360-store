@@ -313,11 +313,15 @@ class ApiClient {
   }
 
   // Payments
+  async getPaymentChannels(): Promise<ApiResponse<any>> {
+    return this.request('/payments/channels')
+  }
+
   async createPaymentIntent(data: {
     orderId: string
     amount?: number
     currency?: string
-    paymentMethod?: 'stripe' | 'mtn_momo' | 'paystack'
+    paymentMethod?: 'stripe' | 'mtn_momo' | 'paystack' | 'paystack_mobile'
     payerNumber?: string
   }): Promise<ApiResponse<any>> {
     return this.request('/payments/intents', {

@@ -57,7 +57,8 @@ const createCartStore = (set: any, get: any) => ({
         try {
           const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
           if (!token) {
-            set({ items: [], subtotal: 0, itemCount: 0, isLoading: false })
+            // Don't clear cart for non-authenticated users - keep local cart
+            set({ isLoading: false })
             return
           }
 
@@ -70,8 +71,8 @@ const createCartStore = (set: any, get: any) => ({
 
           if (!response.ok) {
             if (response.status === 401) {
-              // User not authenticated, clear cart
-              set({ items: [], subtotal: 0, itemCount: 0, isLoading: false })
+              // User not authenticated, keep local cart
+              set({ isLoading: false })
               return
             }
             throw new Error('Failed to fetch cart')
@@ -87,6 +88,7 @@ const createCartStore = (set: any, get: any) => ({
             isLoading: false,
           })
         } catch (error) {
+          // On error, keep local cart and just set error
           set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false })
         }
       },

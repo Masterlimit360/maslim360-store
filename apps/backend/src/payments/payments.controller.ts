@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, Headers, UseGuards, RawBodyRequest, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Headers, UseGuards, RawBodyRequest, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -19,7 +19,7 @@ export class PaymentsController {
       orderId: string;
       amount?: number;
       currency?: string;
-      paymentMethod?: 'stripe' | 'mtn_momo' | 'paystack';
+      paymentMethod?: 'stripe' | 'mtn_momo' | 'paystack' | 'paystack_mobile';
       payerNumber?: string;
     },
   ) {
@@ -30,6 +30,15 @@ export class PaymentsController {
       body.paymentMethod,
       { payerNumber: body.payerNumber },
     );
+  }
+
+  @Get('channels')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get available payment channels for current merchant' })
+  @ApiResponse({ status: 200, description: 'List of available payment channels' })
+  async getAvailableChannels() {
+    return this.paymentsService.getAvailableChannels();
   }
 
   @Post('confirm')

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,7 +26,7 @@ const stats = [
 
 const team = [
   {
-    name: 'Kelvin Osei',
+    name: 'Sarfo Kelvin Junior',
     role: 'Founder & CEO',
     image: '/assets/images/ceo-founder.jpg',
     bio: 'Visionary leader with 10+ years in e-commerce and technology.',
@@ -120,7 +121,7 @@ export default function AboutPage() {
                 <div className="space-y-4 text-muted-foreground">
                   <p>
                     MasLim360 Store was born from a simple idea: to make quality products 
-                    accessible to everyone, everywhere. Founded in 2020 by Kelvin Osei, 
+                    accessible to everyone, everywhere. Founded in 2020 by Sarfo Kelvin Junior, 
                     our journey began with a vision to revolutionize online shopping.
                   </p>
                   <p>
@@ -258,13 +259,17 @@ export default function AboutPage() {
             Join thousands of satisfied customers and discover amazing products today.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="bg-white text-yellow-600 hover:bg-gray-100">
-              Start Shopping
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button size="lg" variant="outline" className="border-black text-black hover:bg-black hover:text-yellow-500">
-              Contact Us
-            </Button>
+            <Link href="/products">
+              <Button size="lg" className="bg-white text-yellow-600 hover:bg-gray-100">
+                Start Shopping
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+            <Link href="/contact">
+              <Button size="lg" variant="outline" className="border-black text-black hover:bg-black hover:text-yellow-500">
+                Contact Us
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

@@ -5,9 +5,20 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { firstValueFrom } from 'rxjs';
 
+interface PaymentChannelConfig {
+  id: string;
+  name: string;
+  displayName: string;
+}
+
 @Injectable()
 export class PaymentsService {
   private stripe: Stripe;
+  private readonly AVAILABLE_CHANNELS: PaymentChannelConfig[] = [
+    { id: 'card', name: 'card', displayName: 'Credit/Debit Card' },
+    { id: 'bank', name: 'bank', displayName: 'Bank Transfer' },
+    { id: 'mobile_money_ghana', name: 'mobile_money_ghana', displayName: 'Mobile Money (Ghana)' },
+  ];
 
   constructor(
     private prisma: PrismaService,
@@ -20,11 +31,58 @@ export class PaymentsService {
     }
   }
 
+  /**
+   * Get available payment channels based on merchant configuration
+   * For now returns all channels, but in production should verify with Paystack API
+   */
+  async getAvailableChannels() {
+    const paystackSecret = this.configService.get<string>('PAYSTACK_SECRET_KEY');
+    
+    const channels = [];
+
+    // Always offer card for Stripe if configured
+    if (this.stripe) {
+      channels.push({
+        id: 'card',
+        name: 'card',
+        displayName: 'Credit/Debit Card',
+        isAvailable: true,
+        description: 'Visa, Mastercard, and other major cards',
+      });
+    }
+
+    // Offer Paystack channels if configured
+    if (paystackSecret) {
+      channels.push(
+        {
+          id: 'paystack',
+          name: 'paystack',
+          displayName: 'Paystack (Card & Bank)',
+          isAvailable: true,
+          description: 'Pay with card or bank transfer',
+        },
+        {
+          id: 'paystack_mobile',
+          name: 'paystack_mobile',
+          displayName: 'Mobile Money (Ghana)',
+          isAvailable: true,
+          description: 'Pay via Vodafone Cash, MTN Mobile Money, or AirtelTigo Money',
+        }
+      );
+    }
+
+    return {
+      success: true,
+      channels,
+      message: channels.length > 0 ? 'Payment channels available' : 'No payment channels configured',
+    };
+  }
+
   async createPaymentIntent(
     orderId: string,
     amount?: number,
-    currency = 'usd',
-    paymentMethod: 'stripe' | 'mtn_momo' | 'paystack' = 'stripe',
+    currency = 'ghs',
+    paymentMethod: 'stripe' | 'mtn_momo' | 'paystack' | 'paystack_mobile' = 'stripe',
     metadata?: { payerNumber?: string },
   ) {
     const order = await this.prisma.order.findUnique({
@@ -50,7 +108,7 @@ export class PaymentsService {
     }
 
     // Handle Paystack payments
-    if (paymentMethod === 'paystack') {
+    if (paymentMethod === 'paystack' || paymentMethod === 'paystack_mobile') {
       const paystackSecret = this.configService.get<string>('PAYSTACK_SECRET_KEY');
 
       if (!paystackSecret) {
@@ -58,6 +116,8 @@ export class PaymentsService {
       }
 
       try {
+        const isMobile = paymentMethod === 'paystack_mobile';
+
         // Get frontend URL from config
         const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
         
@@ -65,24 +125,31 @@ export class PaymentsService {
         const user = await this.prisma.user.findUnique({ where: { id: order.userId } });
         const customerEmail = user?.email || 'customer@example.com';
         
+        // Determine Paystack channels (only mobile money when requested)
+        const channels = isMobile
+          ? ['mobile_money_ghana']
+          : ['card', 'bank', 'mobile_money_ghana'];
+
         // Call Paystack API to initialize transaction
         const paystackResponse = await firstValueFrom(
           this.httpService.post<any>(
             'https://api.paystack.co/transaction/initialize',
             {
               email: customerEmail,
-              amount: Math.round(paymentAmount * 100), // Paystack expects amount in cents
+              amount: Math.round(paymentAmount * 100), // Paystack expects amount in kobo/cents
+              currency: currency.toUpperCase(),
               reference: `ORD-${order.id}-${Date.now()}`,
               callback_url: `${frontendUrl}/paystack-return`,
               metadata: {
                 orderId: order.id,
                 orderNumber: order.orderNumber,
+                payerNumber: metadata?.payerNumber,
               },
+              channels,
             },
             {
               headers: {
                 Authorization: `Bearer ${paystackSecret}`,
-                'Content-Type': 'application/json',
               },
             }
           )
@@ -101,7 +168,7 @@ export class PaymentsService {
             amount: paymentAmount,
             currency: currency.toUpperCase(),
             status: 'PENDING',
-            paymentMethod: 'paystack',
+            paymentMethod: isMobile ? 'paystack_mobile' : 'paystack',
             transactionId: data.reference,
             gatewayResponse: JSON.stringify({
               reference: data.reference,
@@ -210,8 +277,8 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    // Verify Paystack payment
-    if (payment.paymentMethod === 'paystack') {
+    // Verify Paystack payment (including mobile money)
+    if (payment.paymentMethod === 'paystack' || payment.paymentMethod === 'paystack_mobile') {
       const paystackSecret = this.configService.get<string>('PAYSTACK_SECRET_KEY');
       if (!paystackSecret) {
         throw new BadRequestException('Paystack is not configured');

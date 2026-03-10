@@ -5,8 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatPrice(price: number, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
+export function formatPrice(price: number, currency: string = 'GHS') {
+  // default to Ghana Cedi; use locale appropriate to currency
+  const locale = currency.toUpperCase() === 'GHS' ? 'en-GH' : 'en-US'
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
   }).format(price)

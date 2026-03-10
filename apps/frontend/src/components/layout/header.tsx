@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, ShoppingCart, User, Menu, X, Store } from 'lucide-react'
+import { Search, ShoppingCart, User, Menu, X, Store, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +18,7 @@ export function Header() {
   const [isSeller, setIsSeller] = useState(false)
   const router = useRouter()
   const { itemCount } = useCart()
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, logout } = useAuth()
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -133,15 +133,28 @@ export function Header() {
 
             {/* User Menu */}
             {isAuthenticated && user ? (
-              <Link href="/profile">
-                <Button variant="ghost" size="icon" className="p-0" aria-label="User profile">
-                  {user.avatar ? (
-                    <Image src={user.avatar} alt={user.firstName || 'User'} width={32} height={32} className="rounded-full" />
-                  ) : (
-                    <User className="h-5 w-5" />
-                  )}
+              <>
+                <Link href="/profile">
+                  <Button variant="ghost" size="icon" className="p-0" aria-label="User profile">
+                    {user.avatar ? (
+                      <Image src={user.avatar} alt={user.firstName || 'User'} width={32} height={32} className="rounded-full" />
+                    ) : (
+                      <User className="h-5 w-5" />
+                    )}
+                  </Button>
+                </Link>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    logout()
+                    router.push('/auth/login')
+                  }}
+                  aria-label="Logout"
+                >
+                  <LogOut className="h-5 w-5" />
                 </Button>
-              </Link>
+              </>
             ) : (
               <Link href="/auth/login">
                 <Button variant="ghost" size="icon" aria-label="Login">
@@ -204,6 +217,18 @@ export function Header() {
                   <Store className="h-4 w-4" />
                   Seller Dashboard
                 </Link>
+              )}
+              {isAuthenticated && (
+                <button
+                  onClick={() => {
+                    logout()
+                    router.push('/auth/login')
+                  }}
+                  className="text-sm font-medium hover:text-primary flex items-center gap-1"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </button>
               )}
             </nav>
           </div>

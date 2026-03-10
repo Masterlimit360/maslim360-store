@@ -67,7 +67,11 @@ export default function CartPage() {
 
   useEffect(() => {
     const loadCart = async () => {
-      await fetchCart()
+      // Only fetch from server if user is authenticated
+      const token = localStorage.getItem('token')
+      if (token) {
+        await fetchCart()
+      }
     }
     loadCart()
   }, [])
